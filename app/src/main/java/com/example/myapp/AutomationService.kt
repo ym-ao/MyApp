@@ -13,6 +13,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 import com.example.myapp.model.GridProfile
+import com.example.myapp.model.ReadStatus
 import com.example.myapp.ocr.GridReader
 import com.example.myapp.storage.GridStorage
 import com.example.myapp.storage.LastReadStore
@@ -148,8 +149,9 @@ class AutomationService : AccessibilityService() {
             GridReader.read(profile, bitmap) { readings ->
                 Thread {
                     LastReadStore.save(applicationContext, profile.name, bitmap, readings)
-                    val ok = readings.count { it.value != null }
-                    toast("Read $ok of ${readings.size} boxes. Open MyApp > View Last Result.")
+                    val tiles = readings.count { it.status != ReadStatus.EMPTY }
+                    val ok = readings.count { it.status == ReadStatus.READ }
+                    toast("Found $tiles tiles, read $ok. Open MyApp > View Last Result.")
                 }.start()
             }
         }

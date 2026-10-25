@@ -8,12 +8,14 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 import android.widget.ImageView
+import com.example.myapp.model.ReadStatus
 import com.example.myapp.model.Reading
 
 /**
  * Draws OCR results on top of the screenshot that was read: a thin yellow box
- * for the area that was scanned, and the number in green (or a red "?" when
- * nothing could be read) at each tile center.
+ * for the area that was scanned, and at each tile center: the number in green
+ * (confident), orange (unsure), a red "?" (tile there but unreadable), or a grey
+ * dash (empty cell).
  */
 class ResultOverlayView @JvmOverloads constructor(
     context: Context,
@@ -51,13 +53,24 @@ class ResultOverlayView @JvmOverloads constructor(
         textPaint.textSize = 24f * scale
 
         for (r in readings) {
+            val center = floatArrayOf(r.x, r.y)
+            matrix.mapPoints(center)
+
+            if (r.status == ReadStatus.EMPTY) {
+                textPaint.color = Color.GRAY
+                canvas.drawText("-", center[0], center[1] + textPaint.textSize / 3f, textPaint)
+                continue
+            }
+
             val rect = floatArrayOf(r.cropLeft, r.cropTop, r.cropRight, r.cropBottom)
             matrix.mapPoints(rect)
             canvas.drawRect(rect[0], rect[1], rect[2], rect[3], cropPaint)
 
-            val center = floatArrayOf(r.x, r.y)
-            matrix.mapPoints(center)
-            textPaint.color = if (r.value != null) Color.GREEN else Color.RED
+            textPaint.color = when (r.status) {
+                ReadStatus.READ -> Color.GREEN
+                ReadStatus.LOW_CONFIDENCE -> Color.parseColor("#FFA000")
+                else -> Color.RED
+            }
             canvas.drawText(
                 r.value?.toString() ?: "?",
                 center[0],

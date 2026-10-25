@@ -3,6 +3,7 @@ package com.example.myapp.storage
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.example.myapp.model.ReadStatus
 import com.example.myapp.model.Reading
 import org.json.JSONArray
 import org.json.JSONObject
@@ -29,6 +30,7 @@ object LastReadStore {
             o.put("x", r.x.toDouble())
             o.put("y", r.y.toDouble())
             o.put("value", r.value ?: JSONObject.NULL)
+            o.put("status", r.status.name)
             o.put("raw", r.raw)
             o.put("l", r.cropLeft.toDouble())
             o.put("t", r.cropTop.toDouble())
@@ -59,6 +61,8 @@ object LastReadStore {
                     x = o.getDouble("x").toFloat(),
                     y = o.getDouble("y").toFloat(),
                     value = if (o.isNull("value")) null else o.getInt("value"),
+                    status = runCatching { ReadStatus.valueOf(o.optString("status")) }
+                        .getOrDefault(ReadStatus.UNREADABLE),
                     raw = o.getString("raw"),
                     cropLeft = o.getDouble("l").toFloat(),
                     cropTop = o.getDouble("t").toFloat(),

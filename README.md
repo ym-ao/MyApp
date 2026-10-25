@@ -44,7 +44,9 @@ you change devices or the game's zoom/scroll state.
    (Android 13+: if the switch is greyed out, Settings > Apps > MyApp > menu (three dots) > Allow restricted settings.)
 2. Pick your saved grid in the spinner and tap **Read Grid Numbers**.
 3. Within 5 seconds, open the game with the board visible. The app screenshots it and reads the number on every calibrated box (Android 11+).
-4. Come back and tap **View Last Result**: green numbers are what OCR read, red "?" are misses, yellow boxes show the area that was scanned.
+4. Come back and tap **View Last Result**. Green = read (at least two of three attempts agreed), orange = unsure (only one attempt got a number), red "?" = a tile is there but no number could be read, grey dash = empty cell. Yellow boxes show the scanned area. The text at the bottom lists the first problem tiles and the raw text each attempt returned.
+
+How reading works: empty cells are skipped (a flat color); for each tile the number area is cropped, processed three different ways, and each copy goes through on-device text recognition. Numbers must be 1-2 digits.
 
 The service also has `tap()` and `drag()` ready for the sort / click / merge functions; they are not wired to any button yet.
 
