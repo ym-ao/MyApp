@@ -39,10 +39,21 @@ later OCR to check.
 **Note:** calibration is tied to the screenshot's resolution/orientation. Re-calibrate if
 you change devices or the game's zoom/scroll state.
 
-## Roadmap (not yet built)
-- **#1 — OCR auto-sort:** read the number at each calibrated box (ML Kit Text Recognition), then drag tiles into highest→lowest order at an adjustable speed
-- **#3 — Manual click set:** record arbitrary tap points as a separate, reusable action list
-- **#4 — Sequencer:** chain #1/#2/#3 in a user-defined order
-- **#5 — Auto-merge:** find the lowest tile, merge it with a matching neighbor, wait an adjustable delay, repeat
+## Accessibility Service + OCR read test (built, needs on-device testing)
+1. Open the app, tap **Open Accessibility Settings**, find **MyApp automation**, turn it on.
+   (Android 13+: if the switch is greyed out, Settings > Apps > MyApp > menu (three dots) > Allow restricted settings.)
+2. Pick your saved grid in the spinner and tap **Read Grid Numbers**.
+3. Within 5 seconds, open the game with the board visible. The app screenshots it and reads the number on every calibrated box (Android 11+).
+4. Come back and tap **View Last Result**: green numbers are what OCR read, red "?" are misses, yellow boxes show the area that was scanned.
 
-All of #1, #3, and #5 require an Accessibility Service (to read live screen content and inject taps/drags) — that's the next piece to build.
+The service also has `tap()` and `drag()` ready for the sort / click / merge functions; they are not wired to any button yet.
+
+## Stable signing key
+`app/debug-shared.p12` is a debug-only signing key so every GitHub build is signed the same way and installs over the previous one. Do not use it for a Play Store release.
+
+## Roadmap (not yet built)
+- **#1 (rest) - auto-sort:** use the OCR numbers to drag tiles highest to lowest at an adjustable speed
+- **#3 - Manual click set:** record arbitrary tap points as a reusable action list
+- **#4 - Sequencer:** chain #1/#3/#5 in a user-defined order
+- **#5 - Auto-merge:** find the lowest tile, merge it with a matching neighbour, wait an adjustable delay, repeat
+- Floating start/stop panel over the game, keep-alive/battery settings, in-app profile management
