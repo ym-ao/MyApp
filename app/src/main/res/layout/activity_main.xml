@@ -55,6 +55,51 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:paddingTop="24dp"
+            android:text="Click point (e.g. the summon button):" />
+
+        <Spinner
+            android:id="@+id/clickPointSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp" />
+
+        <Button
+            android:id="@+id/btnSetClickPoint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Set Click Point" />
+
+        <Button
+            android:id="@+id/btnTestTap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Test Tap (5 s countdown)" />
+
+        <EditText
+            android:id="@+id/maxHoldInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Max hold time in seconds"
+            android:text="30"
+            android:inputType="number" />
+
+        <Button
+            android:id="@+id/btnHoldSummon"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold Button Until Grid Full (5 s countdown)" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:textSize="12sp"
+            android:text="Hold: uses the grid chosen above. It presses and holds the click point until no empty squares are left. Press VOLUME DOWN at any time to stop it. It also stops by itself after the max hold time." />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:paddingTop="16dp"
             android:textSize="12sp"
             android:text="Read Grid: tap it, then open the game within 5 seconds with the board visible. The app takes a screenshot, reads the number on every calibrated box, and saves the result. Come back and tap View Last Result to check it." />

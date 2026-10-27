@@ -3,7 +3,8 @@
     android:description="@string/accessibility_service_description"
     android:accessibilityEventTypes="typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagDefault"
+    android:accessibilityFlags="flagDefault|flagRequestFilterKeyEvents"
     android:canPerformGestures="true"
     android:canTakeScreenshot="true"
+    android:canRequestFilterKeyEvents="true"
     android:notificationTimeout="100" />

@@ -113,6 +113,16 @@ object GridReader {
         }
     }
 
+    /** How many calibrated cells currently have no tile (fast: no text reading involved). */
+    fun countEmpty(profile: GridProfile, screenshot: Bitmap): Int {
+        val boxes = profile.allBoxes()
+        if (boxes.isEmpty()) return 0
+        val sx = screenshot.width.toFloat() / profile.screenWidth
+        val sy = screenshot.height.toFloat() / profile.screenHeight
+        val cell = estimateCell(boxes, profile.screenWidth * 0.04f) * (sx + sy) / 2f
+        return boxes.count { isEmpty(screenshot, it.x * sx, it.y * sy, cell) }
+    }
+
     /**
      * A tile number is 1 or 2 digits. Anything longer (e.g. "389") means stray
      * pixels were read as extra digits, so we treat it as unreadable rather

@@ -50,6 +50,14 @@ How reading works: empty cells are skipped (a flat color); for each tile the num
 
 The service also has `tap()` and `drag()` ready for the sort / click / merge functions; they are not wired to any button yet.
 
+## Click points + hold-until-full (built, needs on-device testing)
+
+1. **Set Click Point**: load a screenshot of the game, tap the center of the summon button, name it (e.g. `summon`), save. Only the last tap is kept.
+2. **Test Tap (5 s countdown)**: taps the saved point once, to check it lands on the button.
+3. **Hold Button Until Grid Full (5 s countdown)**: presses and holds the click point, checking the grid about once a second. It lets go when no empty squares are left, after the max hold time (default 30 s), or when you press **Volume Down** (emergency stop).
+
+Holding is done as back-to-back 1.1 s pieces of one press, so the finger never lifts. Needs Android 11 or newer.
+
 ## Stable signing key
 `app/debug-shared.p12` is a debug-only signing key so every GitHub build is signed the same way and installs over the previous one. Do not use it for a Play Store release.
 

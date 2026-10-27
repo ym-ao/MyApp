@@ -32,6 +32,11 @@
             android:label="Set Up Grid" />
 
         <activity
+            android:name=".ClickPointActivity"
+            android:exported="false"
+            android:label="Set Click Point" />
+
+        <activity
             android:name=".ReadResultActivity"
             android:exported="false"
             android:label="Last Read Result"

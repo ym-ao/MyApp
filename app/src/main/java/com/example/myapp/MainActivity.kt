@@ -10,12 +10,14 @@ import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.myapp.databinding.ActivityMainBinding
+import com.example.myapp.storage.ClickPointStorage
 import com.example.myapp.storage.GridStorage
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var selectedProfile: String? = null
+    private var selectedPoint: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,6 +35,23 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ReadResultActivity::class.java))
         }
 
+        binding.btnSetClickPoint.setOnClickListener {
+            startActivity(Intent(this, ClickPointActivity::class.java))
+        }
+        binding.btnTestTap.setOnClickListener { startTestTap() }
+        binding.btnHoldSummon.setOnClickListener { startHoldSummon() }
+
+        binding.clickPointSpinner.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: AdapterView<*>?, view: View?, position: Int, id: Long
+                ) {
+                    selectedPoint = parent?.getItemAtPosition(position) as? String
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
+
         binding.profileSpinner.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(
@@ -49,6 +68,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         refreshStatus()
         refreshProfiles()
+        refreshClickPoints()
     }
 
     private fun refreshStatus() {
@@ -69,6 +89,50 @@ class MainActivity : AppCompatActivity() {
             ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, profiles)
         val index = profiles.indexOf(selectedProfile)
         if (index >= 0) binding.profileSpinner.setSelection(index)
+    }
+
+    private fun refreshClickPoints() {
+        val points = ClickPointStorage.list(this)
+        binding.clickPointSpinner.adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, points)
+        val index = points.indexOf(selectedPoint)
+        if (index >= 0) binding.clickPointSpinner.setSelection(index)
+    }
+
+    private fun startTestTap() {
+        val service = AutomationService.instance
+        if (service == null) {
+            Toast.makeText(this, "Turn on the accessibility service first", Toast.LENGTH_LONG).show()
+            return
+        }
+        val point = binding.clickPointSpinner.selectedItem as? String
+        if (point == null) {
+            Toast.makeText(this, "Set a click point first", Toast.LENGTH_LONG).show()
+            return
+        }
+        service.tapPointAfterDelay(point, 5000L)
+        moveTaskToBack(true)
+    }
+
+    private fun startHoldSummon() {
+        val service = AutomationService.instance
+        if (service == null) {
+            Toast.makeText(this, "Turn on the accessibility service first", Toast.LENGTH_LONG).show()
+            return
+        }
+        val grid = binding.profileSpinner.selectedItem as? String
+        if (grid == null) {
+            Toast.makeText(this, "Set up a grid first", Toast.LENGTH_LONG).show()
+            return
+        }
+        val point = binding.clickPointSpinner.selectedItem as? String
+        if (point == null) {
+            Toast.makeText(this, "Set a click point first", Toast.LENGTH_LONG).show()
+            return
+        }
+        val maxSeconds = binding.maxHoldInput.text.toString().toIntOrNull()?.coerceIn(5, 300) ?: 30
+        service.holdSummonAfterDelay(grid, point, 5000L, maxSeconds)
+        moveTaskToBack(true)
     }
 
     private fun startReadTest() {

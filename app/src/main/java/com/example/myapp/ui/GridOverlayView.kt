@@ -34,6 +34,12 @@ class GridOverlayView @JvmOverloads constructor(
     var imageView: ImageView? = null
     var mode: CalibrationMode = CalibrationMode.MANUAL
 
+    /** When true, each tap replaces the previous one (used to record a single click point). */
+    var singlePoint: Boolean = false
+
+    /** Called after every tap that changes the marks (lets a screen update its status line). */
+    var onChanged: (() -> Unit)? = null
+
     val boxes = mutableListOf<GridBox>()
     private var nextId = 1
 
@@ -74,6 +80,10 @@ class GridOverlayView @JvmOverloads constructor(
 
         when (mode) {
             CalibrationMode.MANUAL -> {
+                if (singlePoint) {
+                    boxes.clear()
+                    nextId = 1
+                }
                 boxes.add(GridBox(nextId++, pts[0].toInt(), pts[1].toInt()))
             }
             CalibrationMode.FAST_GRID -> {
@@ -82,6 +92,7 @@ class GridOverlayView @JvmOverloads constructor(
             }
         }
         invalidate()
+        onChanged?.invoke()
         return true
     }
 
