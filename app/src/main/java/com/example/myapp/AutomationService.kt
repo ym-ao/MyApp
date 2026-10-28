@@ -14,6 +14,9 @@ import android.view.KeyEvent
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
+import com.example.myapp.automation.BoardAction
+import com.example.myapp.automation.BoardPlanner
+import com.example.myapp.automation.Move
 import com.example.myapp.model.ClickPoint
 import com.example.myapp.model.GridProfile
 import com.example.myapp.model.ReadStatus
@@ -21,6 +24,7 @@ import com.example.myapp.ocr.GridReader
 import com.example.myapp.storage.ClickPointStorage
 import com.example.myapp.storage.GridStorage
 import com.example.myapp.storage.LastReadStore
+import com.example.myapp.storage.PlanStore
 
 /**
  * The part of the app that is allowed to look at the screen and perform
@@ -40,8 +44,8 @@ class AutomationService : AccessibilityService() {
         private const val HOLD_SEGMENT_MS = 1100L
     }
 
-    // True from the moment a hold-summon is started until it ends (including its countdown).
-    @Volatile private var holdActive = false
+    // True from the moment a job (hold, sort, merge) is started until it ends, countdown included.
+    @Volatile private var jobActive = false
     @Volatile private var stopRequested = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -57,9 +61,9 @@ class AutomationService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
-    /** While a hold is running, Volume Down is an emergency stop (and doesn't change the volume). */
+    /** While a job is running, Volume Down is an emergency stop (and doesn't change the volume). */
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (holdActive && event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+        if (jobActive && event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
             if (event.action == KeyEvent.ACTION_DOWN) stopRequested = true
             return true
         }
@@ -68,7 +72,7 @@ class AutomationService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
-        holdActive = false
+        jobActive = false
         return super.onUnbind(intent)
     }
 
@@ -218,7 +222,7 @@ class AutomationService : AccessibilityService() {
      * or after maxSeconds.
      */
     fun holdSummonAfterDelay(gridName: String, pointName: String, delayMs: Long, maxSeconds: Int) {
-        if (holdActive) {
+        if (jobActive) {
             toast("Already running. Press Volume Down to stop it.")
             return
         }
@@ -236,7 +240,7 @@ class AutomationService : AccessibilityService() {
             toast("This needs Android 11 or newer")
             return
         }
-        holdActive = true
+        jobActive = true
         stopRequested = false
         toast("Switch to the game now. Holding starts in ${delayMs / 1000} seconds. Press Volume Down to stop.")
         mainHandler.postDelayed({ startHold(profile, point, maxSeconds * 1000L) }, delayMs)
@@ -244,22 +248,22 @@ class AutomationService : AccessibilityService() {
 
     private fun startHold(profile: GridProfile, point: ClickPoint, maxMs: Long) {
         if (stopRequested) {
-            endHold("Stopped")
+            endJob("Stopped")
             return
         }
         captureScreen { bitmap, error ->
             if (bitmap == null) {
-                endHold(error ?: "Screenshot failed")
+                endJob(error ?: "Screenshot failed")
                 return@captureScreen
             }
             val savedLandscape = profile.screenWidth > profile.screenHeight
             if (!sameOrientation(point, bitmap) || savedLandscape != (bitmap.width > bitmap.height)) {
-                endHold("Screen orientation doesn't match the saved grid/point. Rotate and try again.")
+                endJob("Screen orientation doesn't match the saved grid/point. Rotate and try again.")
                 return@captureScreen
             }
             val empty = GridReader.countEmpty(profile, bitmap)
             if (empty == 0) {
-                endHold("The grid is already full")
+                endJob("The grid is already full")
                 return@captureScreen
             }
             val x = point.x * bitmap.width.toFloat() / point.screenWidth
@@ -268,8 +272,8 @@ class AutomationService : AccessibilityService() {
         }
     }
 
-    private fun endHold(message: String) {
-        holdActive = false
+    private fun endJob(message: String) {
+        jobActive = false
         stopRequested = false
         toast(message)
     }
@@ -328,13 +332,13 @@ class AutomationService : AccessibilityService() {
                     }
 
                     override fun onCancelled(gestureDescription: GestureDescription?) {
-                        endHold("The press was interrupted")
+                        endJob("The press was interrupted")
                     }
                 },
                 null
             )
             if (!started) {
-                if (previous != null) release("Couldn't keep holding") else endHold("Couldn't press the button")
+                if (previous != null) release("Couldn't keep holding") else endJob("Couldn't press the button")
                 return
             }
             lastStroke = stroke
@@ -356,7 +360,7 @@ class AutomationService : AccessibilityService() {
         private fun release(message: String) {
             val previous = lastStroke
             if (previous == null) {
-                endHold(message)
+                endJob(message)
                 return
             }
             val path = Path().apply { moveTo(x, y) }
@@ -365,16 +369,212 @@ class AutomationService : AccessibilityService() {
                 GestureDescription.Builder().addStroke(stroke).build(),
                 object : AccessibilityService.GestureResultCallback() {
                     override fun onCompleted(gestureDescription: GestureDescription?) {
-                        endHold(message)
+                        endJob(message)
                     }
 
                     override fun onCancelled(gestureDescription: GestureDescription?) {
-                        endHold(message)
+                        endJob(message)
                     }
                 },
                 null
             )
-            if (!started) endHold(message)
+            if (!started) endJob(message)
+        }
+    }
+
+
+    // ---- sort and merge: read the board, plan the drags, perform them ----
+
+    /**
+     * After a countdown: screenshot, read every tile, plan the drags, then either
+     * show the plan (previewOnly) or perform it. Volume Down stops it.
+     */
+    fun runBoardAction(
+        action: BoardAction,
+        gridName: String,
+        delayMs: Long,
+        dragMs: Long,
+        pauseMs: Long,
+        swapSupported: Boolean,
+        previewOnly: Boolean,
+        verifyEach: Boolean
+    ) {
+        if (jobActive) {
+            toast("Already running. Press Volume Down to stop it.")
+            return
+        }
+        val profile = GridStorage.load(this, gridName)
+        if (profile == null) {
+            toast("Grid '$gridName' not found")
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            toast("This needs Android 11 or newer")
+            return
+        }
+        jobActive = true
+        stopRequested = false
+        toast("Switch to the game now. Starting in ${delayMs / 1000} seconds. Press Volume Down to stop.")
+        mainHandler.postDelayed({
+            scanThenAct(action, profile, dragMs, pauseMs, swapSupported, previewOnly, verifyEach)
+        }, delayMs)
+    }
+
+    private fun scanThenAct(
+        action: BoardAction,
+        profile: GridProfile,
+        dragMs: Long,
+        pauseMs: Long,
+        swapSupported: Boolean,
+        previewOnly: Boolean,
+        verifyEach: Boolean
+    ) {
+        if (stopRequested) {
+            endJob("Stopped")
+            return
+        }
+        captureScreen { bitmap, error ->
+            if (bitmap == null) {
+                endJob(error ?: "Screenshot failed")
+                return@captureScreen
+            }
+            val savedLandscape = profile.screenWidth > profile.screenHeight
+            if (savedLandscape != (bitmap.width > bitmap.height)) {
+                endJob("Screen orientation doesn't match the saved grid. Rotate and try again.")
+                return@captureScreen
+            }
+            toast("Reading the board...")
+            GridReader.read(profile, bitmap) { readings ->
+                if (stopRequested) {
+                    endJob("Stopped")
+                    return@read
+                }
+                Thread {
+                    LastReadStore.save(applicationContext, profile.name, bitmap, readings)
+                }.start()
+
+                val sx = bitmap.width.toFloat() / profile.screenWidth
+                val sy = bitmap.height.toFloat() / profile.screenHeight
+                val points = profile.allBoxes().associate { it.id to Pair(it.x * sx, it.y * sy) }
+                val ids = profile.allBoxes().map { it.id }.sorted()
+                val byId = readings.associateBy { it.id }
+                val values = IntArray(ids.size) { i ->
+                    val r = byId[ids[i]]
+                    when {
+                        r == null -> BoardPlanner.UNKNOWN
+                        r.status == ReadStatus.EMPTY -> BoardPlanner.EMPTY
+                        r.status == ReadStatus.READ -> r.value ?: BoardPlanner.UNKNOWN
+                        else -> BoardPlanner.UNKNOWN
+                    }
+                }
+                val known = values.count { it > 0 }
+                val unknown = values.count { it == BoardPlanner.UNKNOWN }
+
+                val title = if (action == BoardAction.SORT) "Sort" else "Merge chain"
+                val moves = if (action == BoardAction.SORT) {
+                    BoardPlanner.planSort(ids, values, swapSupported)
+                } else {
+                    BoardPlanner.planMerge(ids, values)
+                }
+
+                if (previewOnly) {
+                    PlanStore.save(applicationContext, describePlan(title, moves, known, unknown))
+                    endJob("Plan ready. Open MyApp to see it. Nothing was moved.")
+                    return@read
+                }
+                if (moves.isEmpty()) {
+                    endJob(
+                        if (action == BoardAction.SORT) "Nothing to sort: the readable tiles are already in order"
+                        else "No pair to merge among the tiles that were read confidently"
+                    )
+                    return@read
+                }
+                runMoves(
+                    profile, moves, points, dragMs, pauseMs, verifyEach,
+                    "$title finished: ${moves.size} move(s). Reading the board again to check..."
+                )
+            }
+        }
+    }
+
+    private fun describePlan(title: String, moves: List<Move>, known: Int, unknown: Int): String {
+        val sb = StringBuilder()
+        sb.append("$title: ${moves.size} move(s)\n")
+        sb.append("$known tiles read confidently, $unknown unsure or unreadable (left alone).\n\n")
+        moves.take(25).forEachIndexed { i, m ->
+            sb.append("${i + 1}. box ${m.from} to box ${m.to}  (${m.note})\n")
+        }
+        if (moves.size > 25) sb.append("... and ${moves.size - 25} more")
+        return sb.toString()
+    }
+
+    /** Performs the drags one after another, pausing between them. */
+    private fun runMoves(
+        profile: GridProfile,
+        moves: List<Move>,
+        points: Map<Int, Pair<Float, Float>>,
+        dragMs: Long,
+        pauseMs: Long,
+        verifyEach: Boolean,
+        doneMessage: String
+    ) {
+        fun finish() {
+            endJob(doneMessage)
+            mainHandler.postDelayed({ captureAndRead(profile) }, 900L)
+        }
+
+        fun step(i: Int) {
+            if (stopRequested) {
+                endJob("Stopped after $i of ${moves.size} moves")
+                return
+            }
+            if (i >= moves.size) {
+                finish()
+                return
+            }
+            val m = moves[i]
+            val from = points[m.from]
+            val to = points[m.to]
+            if (from == null || to == null) {
+                endJob("Box ${m.from} or ${m.to} has no saved position")
+                return
+            }
+            drag(from.first, from.second, to.first, to.second, dragMs) { ok ->
+                if (!ok) {
+                    endJob("A drag was blocked or cancelled at move ${i + 1} of ${moves.size}")
+                    return@drag
+                }
+                mainHandler.postDelayed({
+                    if (verifyEach && m.expectSourceEmpty) {
+                        verifyEmpty(profile, m.from, 3) { good ->
+                            if (good) step(i + 1)
+                            else endJob("Move ${i + 1}: box ${m.from} still has a tile, so the merge didn't happen. Stopped.")
+                        }
+                    } else {
+                        step(i + 1)
+                    }
+                }, pauseMs)
+            }
+        }
+        step(0)
+    }
+
+    /** Looks at the screen and reports whether the given box is empty now. */
+    private fun verifyEmpty(
+        profile: GridProfile,
+        boxId: Int,
+        attemptsLeft: Int,
+        onResult: (Boolean) -> Unit
+    ) {
+        captureScreen { bitmap, _ ->
+            if (bitmap != null) {
+                onResult(boxId in GridReader.emptyIds(profile, bitmap))
+            } else if (attemptsLeft > 1) {
+                // Android allows about one screenshot per second; try again shortly.
+                mainHandler.postDelayed({ verifyEmpty(profile, boxId, attemptsLeft - 1, onResult) }, 400L)
+            } else {
+                onResult(false)
+            }
         }
     }
 

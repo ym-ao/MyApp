@@ -10,7 +10,10 @@ import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.myapp.databinding.ActivityMainBinding
+import androidx.appcompat.app.AlertDialog
+import com.example.myapp.automation.BoardAction
 import com.example.myapp.storage.ClickPointStorage
+import com.example.myapp.storage.PlanStore
 import com.example.myapp.storage.GridStorage
 
 class MainActivity : AppCompatActivity() {
@@ -40,6 +43,8 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnTestTap.setOnClickListener { startTestTap() }
         binding.btnHoldSummon.setOnClickListener { startHoldSummon() }
+        binding.btnSort.setOnClickListener { startBoardAction(BoardAction.SORT) }
+        binding.btnMerge.setOnClickListener { startBoardAction(BoardAction.MERGE) }
 
         binding.clickPointSpinner.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
@@ -69,6 +74,7 @@ class MainActivity : AppCompatActivity() {
         refreshStatus()
         refreshProfiles()
         refreshClickPoints()
+        showPendingPlan()
     }
 
     private fun refreshStatus() {
@@ -97,6 +103,38 @@ class MainActivity : AppCompatActivity() {
             ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, points)
         val index = points.indexOf(selectedPoint)
         if (index >= 0) binding.clickPointSpinner.setSelection(index)
+    }
+
+    /** If a "preview only" run left a plan behind, show it once. */
+    private fun showPendingPlan() {
+        val plan = PlanStore.takePending(this) ?: return
+        AlertDialog.Builder(this)
+            .setTitle("Plan (nothing was moved)")
+            .setMessage(plan)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun startBoardAction(action: BoardAction) {
+        val service = AutomationService.instance
+        if (service == null) {
+            Toast.makeText(this, "Turn on the accessibility service first", Toast.LENGTH_LONG).show()
+            return
+        }
+        val grid = binding.profileSpinner.selectedItem as? String
+        if (grid == null) {
+            Toast.makeText(this, "Set up a grid first", Toast.LENGTH_LONG).show()
+            return
+        }
+        val dragMs = binding.dragMsInput.text.toString().toLongOrNull()?.coerceIn(30L, 2000L) ?: 150L
+        val pauseMs = binding.pauseMsInput.text.toString().toLongOrNull()?.coerceIn(0L, 5000L) ?: 250L
+        service.runBoardAction(
+            action, grid, 5000L, dragMs, pauseMs,
+            binding.checkSwap.isChecked,
+            binding.checkPreview.isChecked,
+            binding.checkVerify.isChecked
+        )
+        moveTaskToBack(true)
     }
 
     private fun startTestTap() {

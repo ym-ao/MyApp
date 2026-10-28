@@ -58,6 +58,14 @@ The service also has `tap()` and `drag()` ready for the sort / click / merge fun
 
 Holding is done as back-to-back 1.1 s pieces of one press, so the finger never lifts. Needs Android 11 or newer.
 
+## Sort and merge chain (built, needs on-device testing)
+
+Both read the board first, plan the drags, then perform them. Only tiles read confidently (green) are used; unsure and unreadable tiles are left alone. **Preview only** is on by default: it shows the plan in a dialog the next time you open MyApp and moves nothing.
+
+- **Sort Board**: highest level in box 1, lowest at the end, empty squares last. Settings: drag duration, pause after each move, and whether dropping on a different tile swaps them (if your game doesn't swap, untick it and the sort goes through a spare empty square, 3 drags per fix).
+- **Merge Chain**: takes the lowest tile that has a twin (a lowest tile with no twin is skipped), merges it onto the twin with the lowest box number, and keeps that box as the destination: while another tile of the new level exists (taken from the end of the board) it is dragged on too. With "check each merge" ticked, the app looks at the screen after each merge and stops if the source box still has a tile.
+- Volume Down stops either one. Afterwards the board is read again; open **View Last Result** to check.
+
 ## Stable signing key
 `app/debug-shared.p12` is a debug-only signing key so every GitHub build is signed the same way and installs over the previous one. Do not use it for a Play Store release.
 

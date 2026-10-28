@@ -113,6 +113,16 @@ object GridReader {
         }
     }
 
+    /** The ids of calibrated boxes that currently have no tile. */
+    fun emptyIds(profile: GridProfile, screenshot: Bitmap): Set<Int> {
+        val boxes = profile.allBoxes()
+        if (boxes.isEmpty()) return emptySet()
+        val sx = screenshot.width.toFloat() / profile.screenWidth
+        val sy = screenshot.height.toFloat() / profile.screenHeight
+        val cell = estimateCell(boxes, profile.screenWidth * 0.04f) * (sx + sy) / 2f
+        return boxes.filter { isEmpty(screenshot, it.x * sx, it.y * sy, cell) }.map { it.id }.toSet()
+    }
+
     /** How many calibrated cells currently have no tile (fast: no text reading involved). */
     fun countEmpty(profile: GridProfile, screenshot: Bitmap): Int {
         val boxes = profile.allBoxes()

@@ -100,6 +100,68 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:paddingTop="24dp"
+            android:text="Sort and merge (uses the grid chosen above):" />
+
+        <EditText
+            android:id="@+id/dragMsInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Drag duration in ms (how long each drag takes)"
+            android:text="150"
+            android:inputType="number" />
+
+        <EditText
+            android:id="@+id/pauseMsInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Pause after each move in ms (also the delay per merge)"
+            android:text="250"
+            android:inputType="number" />
+
+        <CheckBox
+            android:id="@+id/checkSwap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="Dropping a tile on a different tile swaps them" />
+
+        <CheckBox
+            android:id="@+id/checkVerify"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="Check each merge worked before the next (about 1 s each)" />
+
+        <CheckBox
+            android:id="@+id/checkPreview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="Preview only: show the plan, don't move anything" />
+
+        <Button
+            android:id="@+id/btnSort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sort Board (5 s countdown)" />
+
+        <Button
+            android:id="@+id/btnMerge"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Merge Chain (5 s countdown)" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:textSize="12sp"
+            android:text="Only tiles read confidently (green) are used. Unsure and unreadable tiles are left alone. Volume Down stops a running job. Start with Preview only on, then open MyApp to read the plan." />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:paddingTop="16dp"
             android:textSize="12sp"
             android:text="Read Grid: tap it, then open the game within 5 seconds with the board visible. The app takes a screenshot, reads the number on every calibrated box, and saves the result. Come back and tap View Last Result to check it." />
