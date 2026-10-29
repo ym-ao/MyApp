@@ -32,6 +32,16 @@
             android:label="Set Up Grid" />
 
         <activity
+            android:name=".LibraryActivity"
+            android:exported="false"
+            android:label="Tile Library" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Loop Settings" />
+
+        <activity
             android:name=".ClickPointActivity"
             android:exported="false"
             android:label="Set Click Point" />

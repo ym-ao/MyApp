@@ -58,6 +58,17 @@ The service also has `tap()` and `drag()` ready for the sort / click / merge fun
 
 Holding is done as back-to-back 1.1 s pieces of one press, so the finger never lifts. Needs Android 11 or newer.
 
+## Tile Library (built, needs on-device testing)
+
+Every tile the reader looks at is remembered as a small picture of its number area. In **Tile Library** you give pictures a level and lock them. A locked picture is never changed by the reader, and any tile that looks like it (correlation above 0.92, and no other level nearly as close) gets that level straight away, without text reading, which also makes scans faster. Several pictures can share one level, because the background behind the number changes. New or unmatched pictures still go through text reading; confident reads are saved as "not confirmed", unsure or unreadable ones as "needs a level" (with the reader's guess shown). Typical use: tap **Read Grid Numbers**, open Tile Library, fix the "needs a level" pictures, check the rest, and lock them (or **Lock all with a level** once checked).
+
+## Loop, step order, settings and floating panel (built, needs on-device testing)
+
+- **Loop Settings & Step Order** (main screen): pick the grid, the summon click point and an optional extra click point; set drag duration, pause after each move, longest summon hold, number of loops (0 = until stopped or nothing is left to do) and the pause between loops; tick and reorder the steps (Merge chain, Sort board, Summon, Extra click). Settings save when you leave the screen.
+- **The loop** runs the ticked steps in your order, over and over. It reads the board once, then keeps track of it in memory between merge and sort. With safety checks on, it compares the empty squares on screen with what it expects after every step and stops if they differ. After the summon step (or an extra click) the board is read again when needed. It ends when the loop count is reached, you stop it, nothing was left to do for two loops in a row, or the grid never fills up.
+- **Floating panel**: Start / Stop / Hide bar over the game (an accessibility overlay, no extra permission). Drag it by its top label. It keeps the screen on while showing. Keep it off the grid so it doesn't appear in screenshots.
+- Volume Down still stops any running job.
+
 ## Sort and merge chain (built, needs on-device testing)
 
 Both read the board first, plan the drags, then perform them. Only tiles read confidently (green) are used; unsure and unreadable tiles are left alone. **Preview only** is on by default: it shows the plan in a dialog the next time you open MyApp and moves nothing.

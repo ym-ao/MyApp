@@ -22,29 +22,99 @@
             android:layout_height="wrap_content"
             android:text="Open Accessibility Settings" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="16dp"
+            android:text="Set up"
+            android:textStyle="bold" />
+
         <Button
             android:id="@+id/btnSetupGrid"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Set Up Grid" />
 
+        <Button
+            android:id="@+id/btnSetClickPoint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Set Click Point" />
+
+        <Button
+            android:id="@+id/btnLibrary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tile Library (give pictures a level and lock them)" />
+
+        <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Loop Settings &amp; Step Order" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="16dp"
-            android:text="Grid to read:" />
+            android:text="Run"
+            android:textStyle="bold" />
 
-        <Spinner
-            android:id="@+id/profileSpinner"
+        <Button
+            android:id="@+id/btnShowPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="48dp" />
+            android:text="Show Floating Start / Stop Panel" />
+
+        <Button
+            android:id="@+id/btnStartLoop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Start Loop (5 s countdown)" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:textSize="12sp"
+            android:text="The panel floats over the game: tap Start to run the loop, Stop to end it. Drag the panel by its top label to somewhere that isn't on the grid. Volume Down also stops a running job." />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="16dp"
+            android:text="Test one piece at a time (5 s countdown each, then switch to the game)"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnMerge"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Merge Chain" />
+
+        <Button
+            android:id="@+id/btnSort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sort Board" />
+
+        <Button
+            android:id="@+id/btnHoldSummon"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold Summon Until Grid Full" />
+
+        <Button
+            android:id="@+id/btnTestTap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Test Tap on the Summon Point" />
 
         <Button
             android:id="@+id/btnReadGrid"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Read Grid Numbers (5 s countdown)" />
+            android:text="Read Grid Numbers" />
 
         <Button
             android:id="@+id/btnViewResult"
@@ -55,116 +125,9 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingTop="24dp"
-            android:text="Click point (e.g. the summon button):" />
-
-        <Spinner
-            android:id="@+id/clickPointSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp" />
-
-        <Button
-            android:id="@+id/btnSetClickPoint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Set Click Point" />
-
-        <Button
-            android:id="@+id/btnTestTap"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Test Tap (5 s countdown)" />
-
-        <EditText
-            android:id="@+id/maxHoldInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Max hold time in seconds"
-            android:text="30"
-            android:inputType="number" />
-
-        <Button
-            android:id="@+id/btnHoldSummon"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Hold Button Until Grid Full (5 s countdown)" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="8dp"
+            android:paddingTop="12dp"
             android:textSize="12sp"
-            android:text="Hold: uses the grid chosen above. It presses and holds the click point until no empty squares are left. Press VOLUME DOWN at any time to stop it. It also stops by itself after the max hold time." />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="24dp"
-            android:text="Sort and merge (uses the grid chosen above):" />
-
-        <EditText
-            android:id="@+id/dragMsInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Drag duration in ms (how long each drag takes)"
-            android:text="150"
-            android:inputType="number" />
-
-        <EditText
-            android:id="@+id/pauseMsInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Pause after each move in ms (also the delay per merge)"
-            android:text="250"
-            android:inputType="number" />
-
-        <CheckBox
-            android:id="@+id/checkSwap"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="true"
-            android:text="Dropping a tile on a different tile swaps them" />
-
-        <CheckBox
-            android:id="@+id/checkVerify"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="true"
-            android:text="Check each merge worked before the next (about 1 s each)" />
-
-        <CheckBox
-            android:id="@+id/checkPreview"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:checked="true"
-            android:text="Preview only: show the plan, don't move anything" />
-
-        <Button
-            android:id="@+id/btnSort"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Sort Board (5 s countdown)" />
-
-        <Button
-            android:id="@+id/btnMerge"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Merge Chain (5 s countdown)" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="8dp"
-            android:textSize="12sp"
-            android:text="Only tiles read confidently (green) are used. Unsure and unreadable tiles are left alone. Volume Down stops a running job. Start with Preview only on, then open MyApp to read the plan." />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="16dp"
-            android:textSize="12sp"
-            android:text="Read Grid: tap it, then open the game within 5 seconds with the board visible. The app takes a screenshot, reads the number on every calibrated box, and saves the result. Come back and tap View Last Result to check it." />
+            android:text="Only tiles read confidently (green in View Last Result) are used for merging and sorting; unsure and unreadable tiles are left alone. Sort and Merge can be set to preview only in Loop Settings." />
 
     </LinearLayout>
 </ScrollView>

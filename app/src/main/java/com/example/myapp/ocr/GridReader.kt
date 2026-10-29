@@ -1,5 +1,6 @@
 package com.example.myapp.ocr
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -7,6 +8,7 @@ import com.example.myapp.model.GridBox
 import com.example.myapp.model.GridProfile
 import com.example.myapp.model.ReadStatus
 import com.example.myapp.model.Reading
+import com.example.myapp.storage.TileLibrary
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -41,7 +43,7 @@ object GridReader {
     // Below this brightness variation a cell counts as empty.
     private const val EMPTY_STD = 10.0
 
-    fun read(profile: GridProfile, screenshot: Bitmap, onDone: (List<Reading>) -> Unit) {
+    fun read(context: Context, profile: GridProfile, screenshot: Bitmap, onDone: (List<Reading>) -> Unit) {
         val boxes = profile.allBoxes()
         if (boxes.isEmpty()) {
             onDone(emptyList())
@@ -52,6 +54,7 @@ object GridReader {
         val sy = screenshot.height.toFloat() / profile.screenHeight
         val cell = estimateCell(boxes, profile.screenWidth * 0.04f) * (sx + sy) / 2f
 
+        val library = TileLibrary.entries(context)
         val results = arrayOfNulls<Reading>(boxes.size)
         val tilesLeft = AtomicInteger(boxes.size)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -60,6 +63,7 @@ object GridReader {
             results[index] = reading
             if (tilesLeft.decrementAndGet() == 0) {
                 recognizer.close()
+                TileLibrary.save(context)
                 onDone(results.filterNotNull())
             }
         }
@@ -78,6 +82,18 @@ object GridReader {
             if (isEmpty(screenshot, cx, cy, cell)) {
                 finishTile(index, reading(null, ReadStatus.EMPTY, ""))
                 return@forEachIndexed
+            }
+
+            // A picture you have locked in the library needs no text reading.
+            val thumb = crop(screenshot, cx, cy, cell, CROP_LEFT, CROP_TOP, CROP_RIGHT, CROP_BOTTOM)
+                ?.let { TileLibrary.makeThumb(it) }
+            val feature = thumb?.let { TileLibrary.featureOf(it) }
+            if (feature != null) {
+                val lockedValue = TileLibrary.lookupLocked(library, feature)
+                if (lockedValue != null) {
+                    finishTile(index, reading(lockedValue, ReadStatus.READ, "library"))
+                    return@forEachIndexed
+                }
             }
 
             val variants = makeVariants(screenshot, cx, cy, cell)
@@ -99,12 +115,22 @@ object GridReader {
                                 (it ?: "").replace("\n", " ").trim()
                             }
                             if (votes.isEmpty()) {
+                                if (feature != null && thumb != null) {
+                                    TileLibrary.observe(context, feature, thumb, null, null)
+                                }
                                 finishTile(index, reading(null, ReadStatus.UNREADABLE, raw))
                             } else {
                                 val top = votes.groupingBy { it }.eachCount()
                                     .maxByOrNull { it.value }!!
                                 val status =
                                     if (top.value >= 2) ReadStatus.READ else ReadStatus.LOW_CONFIDENCE
+                                if (feature != null && thumb != null) {
+                                    if (status == ReadStatus.READ) {
+                                        TileLibrary.observe(context, feature, thumb, top.key, null)
+                                    } else {
+                                        TileLibrary.observe(context, feature, thumb, null, top.key)
+                                    }
+                                }
                                 finishTile(index, reading(top.key, status, raw))
                             }
                         }

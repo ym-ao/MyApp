@@ -4,77 +4,123 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
-import com.example.myapp.databinding.ActivityMainBinding
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import com.example.myapp.automation.BoardAction
+import com.example.myapp.databinding.ActivityMainBinding
 import com.example.myapp.storage.ClickPointStorage
-import com.example.myapp.storage.PlanStore
 import com.example.myapp.storage.GridStorage
+import com.example.myapp.storage.PlanStore
+import com.example.myapp.storage.SettingsStore
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var selectedProfile: String? = null
-    private var selectedPoint: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.btnSetupGrid.setOnClickListener {
-            startActivity(Intent(this, CalibrationActivity::class.java))
-        }
         binding.btnEnableService.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
-        binding.btnReadGrid.setOnClickListener { startReadTest() }
+        binding.btnSetupGrid.setOnClickListener {
+            startActivity(Intent(this, CalibrationActivity::class.java))
+        }
+        binding.btnSetClickPoint.setOnClickListener {
+            startActivity(Intent(this, ClickPointActivity::class.java))
+        }
+        binding.btnLibrary.setOnClickListener {
+            startActivity(Intent(this, LibraryActivity::class.java))
+        }
+        binding.btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
         binding.btnViewResult.setOnClickListener {
             startActivity(Intent(this, ReadResultActivity::class.java))
         }
 
-        binding.btnSetClickPoint.setOnClickListener {
-            startActivity(Intent(this, ClickPointActivity::class.java))
+        binding.btnShowPanel.setOnClickListener {
+            val service = needService() ?: return@setOnClickListener
+            service.showPanel()
+            Toast.makeText(this, "Panel is showing. Open the game to use it.", Toast.LENGTH_LONG).show()
         }
-        binding.btnTestTap.setOnClickListener { startTestTap() }
-        binding.btnHoldSummon.setOnClickListener { startHoldSummon() }
-        binding.btnSort.setOnClickListener { startBoardAction(BoardAction.SORT) }
-        binding.btnMerge.setOnClickListener { startBoardAction(BoardAction.MERGE) }
-
-        binding.clickPointSpinner.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: AdapterView<*>?, view: View?, position: Int, id: Long
-                ) {
-                    selectedPoint = parent?.getItemAtPosition(position) as? String
-                }
-
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
+        binding.btnStartLoop.setOnClickListener {
+            val service = needService() ?: return@setOnClickListener
+            service.startLoopAfterDelay(5000L)
+            moveTaskToBack(true)
+        }
+        binding.btnMerge.setOnClickListener {
+            val service = needService() ?: return@setOnClickListener
+            service.runBoardAction(BoardAction.MERGE, 5000L)
+            moveTaskToBack(true)
+        }
+        binding.btnSort.setOnClickListener {
+            val service = needService() ?: return@setOnClickListener
+            service.runBoardAction(BoardAction.SORT, 5000L)
+            moveTaskToBack(true)
+        }
+        binding.btnHoldSummon.setOnClickListener {
+            val service = needService() ?: return@setOnClickListener
+            service.holdSummonAfterDelay(5000L)
+            moveTaskToBack(true)
+        }
+        binding.btnTestTap.setOnClickListener {
+            val service = needService() ?: return@setOnClickListener
+            val point = SettingsStore.load(this).summonPoint
+            if (point.isBlank()) {
+                Toast.makeText(this, "Choose the summon click point in Loop Settings first", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
             }
-
-        binding.profileSpinner.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: AdapterView<*>?, view: View?, position: Int, id: Long
-                ) {
-                    selectedProfile = parent?.getItemAtPosition(position) as? String
-                }
-
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            service.tapPointAfterDelay(point, 5000L)
+            moveTaskToBack(true)
+        }
+        binding.btnReadGrid.setOnClickListener {
+            val service = needService() ?: return@setOnClickListener
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                Toast.makeText(this, "Reading the screen needs Android 11 or newer", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
             }
+            val grid = SettingsStore.load(this).grid
+            if (grid.isBlank()) {
+                Toast.makeText(this, "Choose a grid in Loop Settings first", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            service.readGridAfterDelay(grid, 5000L)
+            moveTaskToBack(true)
+        }
     }
 
     override fun onResume() {
         super.onResume()
         refreshStatus()
-        refreshProfiles()
-        refreshClickPoints()
+        fillInDefaults()
         showPendingPlan()
+    }
+
+    private fun needService(): AutomationService? {
+        val service = AutomationService.instance
+        if (service == null) {
+            Toast.makeText(this, "Turn on the accessibility service first", Toast.LENGTH_LONG).show()
+        }
+        return service
+    }
+
+    /** First run: pick the only grid / a point called "summon" so Loop Settings starts filled in. */
+    private fun fillInDefaults() {
+        val s = SettingsStore.load(this)
+        val grids = GridStorage.listProfiles(this)
+        val points = ClickPointStorage.list(this)
+        var changed = s
+        if ((s.grid.isBlank() || s.grid !in grids) && grids.isNotEmpty()) {
+            changed = changed.copy(grid = grids.first())
+        }
+        if ((s.summonPoint.isBlank() || s.summonPoint !in points) && points.isNotEmpty()) {
+            changed = changed.copy(summonPoint = if ("summon" in points) "summon" else points.first())
+        }
+        if (changed != s) SettingsStore.save(this, changed)
     }
 
     private fun refreshStatus() {
@@ -89,22 +135,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshProfiles() {
-        val profiles = GridStorage.listProfiles(this)
-        binding.profileSpinner.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, profiles)
-        val index = profiles.indexOf(selectedProfile)
-        if (index >= 0) binding.profileSpinner.setSelection(index)
-    }
-
-    private fun refreshClickPoints() {
-        val points = ClickPointStorage.list(this)
-        binding.clickPointSpinner.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, points)
-        val index = points.indexOf(selectedPoint)
-        if (index >= 0) binding.clickPointSpinner.setSelection(index)
-    }
-
     /** If a "preview only" run left a plan behind, show it once. */
     private fun showPendingPlan() {
         val plan = PlanStore.takePending(this) ?: return
@@ -113,82 +143,5 @@ class MainActivity : AppCompatActivity() {
             .setMessage(plan)
             .setPositiveButton("OK", null)
             .show()
-    }
-
-    private fun startBoardAction(action: BoardAction) {
-        val service = AutomationService.instance
-        if (service == null) {
-            Toast.makeText(this, "Turn on the accessibility service first", Toast.LENGTH_LONG).show()
-            return
-        }
-        val grid = binding.profileSpinner.selectedItem as? String
-        if (grid == null) {
-            Toast.makeText(this, "Set up a grid first", Toast.LENGTH_LONG).show()
-            return
-        }
-        val dragMs = binding.dragMsInput.text.toString().toLongOrNull()?.coerceIn(30L, 2000L) ?: 150L
-        val pauseMs = binding.pauseMsInput.text.toString().toLongOrNull()?.coerceIn(0L, 5000L) ?: 250L
-        service.runBoardAction(
-            action, grid, 5000L, dragMs, pauseMs,
-            binding.checkSwap.isChecked,
-            binding.checkPreview.isChecked,
-            binding.checkVerify.isChecked
-        )
-        moveTaskToBack(true)
-    }
-
-    private fun startTestTap() {
-        val service = AutomationService.instance
-        if (service == null) {
-            Toast.makeText(this, "Turn on the accessibility service first", Toast.LENGTH_LONG).show()
-            return
-        }
-        val point = binding.clickPointSpinner.selectedItem as? String
-        if (point == null) {
-            Toast.makeText(this, "Set a click point first", Toast.LENGTH_LONG).show()
-            return
-        }
-        service.tapPointAfterDelay(point, 5000L)
-        moveTaskToBack(true)
-    }
-
-    private fun startHoldSummon() {
-        val service = AutomationService.instance
-        if (service == null) {
-            Toast.makeText(this, "Turn on the accessibility service first", Toast.LENGTH_LONG).show()
-            return
-        }
-        val grid = binding.profileSpinner.selectedItem as? String
-        if (grid == null) {
-            Toast.makeText(this, "Set up a grid first", Toast.LENGTH_LONG).show()
-            return
-        }
-        val point = binding.clickPointSpinner.selectedItem as? String
-        if (point == null) {
-            Toast.makeText(this, "Set a click point first", Toast.LENGTH_LONG).show()
-            return
-        }
-        val maxSeconds = binding.maxHoldInput.text.toString().toIntOrNull()?.coerceIn(5, 300) ?: 30
-        service.holdSummonAfterDelay(grid, point, 5000L, maxSeconds)
-        moveTaskToBack(true)
-    }
-
-    private fun startReadTest() {
-        val service = AutomationService.instance
-        if (service == null) {
-            Toast.makeText(this, "Turn on the accessibility service first", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            Toast.makeText(this, "Reading the screen needs Android 11 or newer", Toast.LENGTH_LONG).show()
-            return
-        }
-        val name = binding.profileSpinner.selectedItem as? String
-        if (name == null) {
-            Toast.makeText(this, "Set up a grid first", Toast.LENGTH_LONG).show()
-            return
-        }
-        service.readGridAfterDelay(name, 5000L)
-        moveTaskToBack(true)
     }
 }

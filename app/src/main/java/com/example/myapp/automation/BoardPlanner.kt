@@ -1,5 +1,9 @@
 package com.example.myapp.automation
 
+import com.example.myapp.model.GridProfile
+import com.example.myapp.model.ReadStatus
+import com.example.myapp.model.Reading
+
 /** One drag: pick up the tile at box [from] and drop it on box [to]. */
 data class Move(
     val from: Int,
@@ -10,6 +14,43 @@ data class Move(
 )
 
 enum class BoardAction { SORT, MERGE }
+
+/**
+ * The board as the app currently believes it to be. It is built from one scan, then
+ * updated in place as moves are made, so later steps don't need another scan.
+ */
+class BoardState(
+    val ids: List<Int>,
+    val values: IntArray,
+    val points: Map<Int, Pair<Float, Float>>,
+    val known: Int,
+    val unknown: Int
+) {
+    /** Boxes that should have no tile on screen right now. */
+    fun expectedEmptyIds(): Set<Int> =
+        ids.filterIndexed { i, _ -> values[i] == BoardPlanner.EMPTY }.toSet()
+
+    companion object {
+        fun build(profile: GridProfile, width: Int, height: Int, readings: List<Reading>): BoardState {
+            val sx = width.toFloat() / profile.screenWidth
+            val sy = height.toFloat() / profile.screenHeight
+            val boxes = profile.allBoxes()
+            val points = boxes.associate { it.id to Pair(it.x * sx, it.y * sy) }
+            val ids = boxes.map { it.id }.sorted()
+            val byId = readings.associateBy { it.id }
+            val values = IntArray(ids.size) { i ->
+                val r = byId[ids[i]]
+                when {
+                    r == null -> BoardPlanner.UNKNOWN
+                    r.status == ReadStatus.EMPTY -> BoardPlanner.EMPTY
+                    r.status == ReadStatus.READ -> r.value ?: BoardPlanner.UNKNOWN
+                    else -> BoardPlanner.UNKNOWN
+                }
+            }
+            return BoardState(ids, values, points, values.count { it > 0 }, values.count { it == BoardPlanner.UNKNOWN })
+        }
+    }
+}
 
 /**
  * Works out which drags to make. Pure logic: it never touches the screen.
@@ -113,5 +154,36 @@ object BoardPlanner {
             break
         }
         return moves
+    }
+
+    /**
+     * Updates [values] as if [moves] had been performed: a drop on an empty square moves the
+     * tile, a drop on an equal tile (in a merge) makes one tile a level higher, any other
+     * drop swaps the two.
+     */
+    fun applyMoves(ids: List<Int>, values: IntArray, moves: List<Move>) {
+        val index = HashMap<Int, Int>()
+        ids.forEachIndexed { p, id -> index[id] = p }
+        for (m in moves) {
+            val a = index[m.from] ?: continue
+            val b = index[m.to] ?: continue
+            val va = values[a]
+            val vb = values[b]
+            if (va <= 0) continue
+            when {
+                vb == 0 -> {
+                    values[b] = va
+                    values[a] = 0
+                }
+                vb > 0 && vb == va && m.expectSourceEmpty -> {
+                    values[b] = vb + 1
+                    values[a] = 0
+                }
+                vb > 0 -> {
+                    values[a] = vb
+                    values[b] = va
+                }
+            }
+        }
     }
 }
