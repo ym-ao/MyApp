@@ -3,13 +3,13 @@ package com.example.myapp.storage
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.example.myapp.ocr.TileVision
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
-import kotlin.math.sqrt
 
-/** One remembered picture of a tile's number area, and the level it stands for. */
+/** One remembered picture of a tile's number, and the level it stands for. */
 class TileEntry(
     val id: String,
     var value: Int?,          // the level, once known; null = still needs a value
@@ -20,21 +20,20 @@ class TileEntry(
 )
 
 /**
- * The picture library. Every tile the reader sees is remembered as a small picture.
- * You give pictures a level and lock them; from then on any tile that looks like a
- * locked picture gets that level without any text reading. Several pictures can share
- * one level (the background behind the number changes sometimes).
+ * The picture library. Every tile the reader sees is remembered as a small, aligned
+ * picture of its number. You give pictures a level and lock them; from then on any tile
+ * that looks like a locked picture gets that level without any text reading, wherever
+ * on the board it is. Several pictures can share one level (the background changes).
  *
- * Pictures are compared by correlation of their brightness pattern: about 0.96 for the
- * same level, up to about 0.8 between neighbouring levels in a test, so we only trust
- * a match above [MATCH] and refuse when two different levels are nearly as close.
+ * A match needs a similarity of at least [MATCH]; if a locked picture of a different
+ * level is nearly as close, we refuse and let the text reader decide.
  */
 object TileLibrary {
 
-    const val W = 36
-    const val H = 30
-    const val MATCH = 0.92f
-    const val MARGIN = 0.04f
+    const val W = TileVision.TW
+    const val H = TileVision.TH
+    const val MATCH = 0.91f
+    const val MARGIN = 0.03f
 
     private var cache: MutableList<TileEntry>? = null
     private var dirty = false
@@ -59,7 +58,11 @@ object TileLibrary {
                     val file = File(dir(context), "$id.png")
                     if (!file.exists()) continue
                     var bmp = BitmapFactory.decodeFile(file.absolutePath) ?: continue
-                    if (bmp.width != W || bmp.height != H) bmp = Bitmap.createScaledBitmap(bmp, W, H, true)
+                    if (bmp.width != W || bmp.height != H) {
+                        // a picture from the first version of the library: align it the new way
+                        bmp = TileVision.fromLegacy(bmp) ?: Bitmap.createScaledBitmap(bmp, W, H, true)
+                        file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    }
                     list.add(
                         TileEntry(
                             id = id,
@@ -67,7 +70,7 @@ object TileLibrary {
                             hint = if (o.isNull("hint")) null else o.getInt("hint"),
                             locked = o.optBoolean("locked", false),
                             thumb = bmp,
-                            feature = featureOf(bmp)
+                            feature = TileVision.featureOf(bmp)
                         )
                     )
                 }
@@ -110,46 +113,27 @@ object TileLibrary {
         markChanged(context)
     }
 
-    /** Brightness pattern with the average removed and the spread scaled to 1. */
-    fun featureOf(thumb: Bitmap): FloatArray {
-        val n = W * H
-        val px = IntArray(n)
-        thumb.getPixels(px, 0, W, 0, 0, W, H)
-        val v = FloatArray(n)
-        var sum = 0f
-        for (i in 0 until n) {
-            val c = px[i]
-            val l = ((c shr 16) and 0xFF) * 0.299f + ((c shr 8) and 0xFF) * 0.587f + (c and 0xFF) * 0.114f
-            v[i] = l
-            sum += l
+    /** Similarity of a tile (best of its few one-pixel shifts) to a stored picture. */
+    private fun similarity(patches: Array<FloatArray>, feature: FloatArray): Float {
+        var best = -1f
+        for (p in patches) {
+            var s = 0f
+            for (i in p.indices) s += p[i] * feature[i]
+            if (s > best) best = s
         }
-        val mean = sum / n
-        var sq = 0f
-        for (i in 0 until n) {
-            v[i] -= mean
-            sq += v[i] * v[i]
-        }
-        val std = sqrt(sq / n) + 1e-6f
-        for (i in 0 until n) v[i] /= std
-        return v
-    }
-
-    private fun correlation(a: FloatArray, b: FloatArray): Float {
-        var s = 0f
-        for (i in a.indices) s += a[i] * b[i]
-        return s / a.size
+        return best
     }
 
     /**
      * The level of a locked picture that clearly matches, or null. Refuses (null) when a
      * locked picture of a different level is almost as close.
      */
-    fun lookupLocked(list: List<TileEntry>, feature: FloatArray): Int? {
+    fun lookupLocked(list: List<TileEntry>, look: TileVision.Look): Int? {
         var bestValue: Int? = null
         var best = -1f
         for (e in list) {
             if (!e.locked || e.value == null) continue
-            val c = correlation(feature, e.feature)
+            val c = similarity(look.patches, e.feature)
             if (c > best) {
                 best = c
                 bestValue = e.value
@@ -158,7 +142,7 @@ object TileLibrary {
         if (bestValue == null || best < MATCH) return null
         for (e in list) {
             if (!e.locked || e.value == null || e.value == bestValue) continue
-            if (correlation(feature, e.feature) >= best - MARGIN) return null
+            if (similarity(look.patches, e.feature) >= best - MARGIN) return null
         }
         return bestValue
     }
@@ -169,12 +153,12 @@ object TileLibrary {
      * added, with a level if the read was confident or a hint if it was not.
      */
     @Synchronized
-    fun observe(context: Context, feature: FloatArray, thumb: Bitmap, value: Int?, hint: Int?) {
+    fun observe(context: Context, look: TileVision.Look, value: Int?, hint: Int?) {
         val list = entries(context)
         var bestEntry: TileEntry? = null
         var best = -1f
         for (e in list) {
-            val c = correlation(feature, e.feature)
+            val c = similarity(look.patches, e.feature)
             if (c > best) {
                 best = c
                 bestEntry = e
@@ -195,12 +179,9 @@ object TileLibrary {
             return
         }
         val id = UUID.randomUUID().toString().take(8)
-        val copy = thumb.copy(Bitmap.Config.ARGB_8888, false)
+        val copy = look.thumb.copy(Bitmap.Config.ARGB_8888, false)
         File(dir(context), "$id.png").outputStream().use { copy.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        list.add(TileEntry(id, value, if (value == null) hint else null, false, copy, featureOf(copy)))
+        list.add(TileEntry(id, value, if (value == null) hint else null, false, copy, TileVision.featureOf(copy)))
         dirty = true
     }
-
-    /** Make a W x H copy of a crop, the size pictures are stored and compared at. */
-    fun makeThumb(crop: Bitmap): Bitmap = Bitmap.createScaledBitmap(crop, W, H, true)
 }

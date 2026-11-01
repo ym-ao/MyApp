@@ -58,9 +58,13 @@ The service also has `tap()` and `drag()` ready for the sort / click / merge fun
 
 Holding is done as back-to-back 1.1 s pieces of one press, so the finger never lifts. Needs Android 11 or newer.
 
+## Saved Grids & Click Points (built, needs on-device testing)
+
+Lists every saved grid and click point with its details. Tap one to use it (as the current grid, summon point or extra click point) or delete it; deleting also clears it from the settings if it was in use.
+
 ## Tile Library (built, needs on-device testing)
 
-Every tile the reader looks at is remembered as a small picture of its number area. In **Tile Library** you give pictures a level and lock them. A locked picture is never changed by the reader, and any tile that looks like it (correlation above 0.92, and no other level nearly as close) gets that level straight away, without text reading, which also makes scans faster. Several pictures can share one level, because the background behind the number changes. New or unmatched pictures still go through text reading; confident reads are saved as "not confirmed", unsure or unreadable ones as "needs a level" (with the reader's guess shown). Typical use: tap **Read Grid Numbers**, open Tile Library, fix the "needs a level" pictures, check the rest, and lock them (or **Lock all with a level** once checked).
+Every tile the reader looks at is remembered as a small picture of its number. In **Tile Library** you give pictures a level and lock them. The reader first finds where the number really is inside the box (calibrated points are a few pixels off, differently in each box), cuts out an aligned picture, and compares it with your locked pictures. A clear match (similarity 0.91 or more, and no other level nearly as close) gives the level straight away, in any box, with no text reading, which also makes scans faster. Only if nothing matches is the number read as text, and the text reading also uses the located spot. Several pictures can share one level, because the background behind the number changes. Confident reads are saved as "not confirmed", unsure or unreadable ones as "needs a level" (with the reader's guess shown). Typical use: tap **Read Grid Numbers**, open Tile Library, fix the "needs a level" pictures, check the rest, and lock them (or **Lock all with a level** once checked). Pictures saved by the first version are re-aligned automatically.
 
 ## Loop, step order, settings and floating panel (built, needs on-device testing)
 
@@ -73,7 +77,7 @@ Every tile the reader looks at is remembered as a small picture of its number ar
 
 Both read the board first, plan the drags, then perform them. Only tiles read confidently (green) are used; unsure and unreadable tiles are left alone. **Preview only** is on by default: it shows the plan in a dialog the next time you open MyApp and moves nothing.
 
-- **Sort Board**: highest level in box 1, lowest at the end, empty squares last. Settings: drag duration, pause after each move, and whether dropping on a different tile swaps them (if your game doesn't swap, untick it and the sort goes through a spare empty square, 3 drags per fix).
+- **Sort Board**: highest level in box 1, lowest at the end, empty squares last. The whole path is worked out from one scan. With **Swap tiles** ticked (Loop Settings, on by default) each fix is one drag, and a drag is only ever aimed at an empty square or at a tile of a different level, never at the same level (that would merge them); the finished plan is checked for this before it is used. Unticked, every drag lands on an empty square (tiles that must trade places go through a spare empty square). A merge during a sort can then only come from a misread tile, which locking pictures in the Tile Library prevents. Preview shows how many drops land on another tile.
 - **Merge Chain**: takes the lowest tile that has a twin (a lowest tile with no twin is skipped), merges it onto the twin with the lowest box number, and keeps that box as the destination: while another tile of the new level exists (taken from the end of the board) it is dragged on too. With "check each merge" ticked, the app looks at the screen after each merge and stops if the source box still has a tile.
 - Volume Down stops either one. Afterwards the board is read again; open **View Last Result** to check.
 

@@ -349,17 +349,31 @@ class AutomationService : AccessibilityService() {
         }
     }
 
-    private fun planFor(action: BoardAction, board: BoardState, settings: AppSettings): List<Move> =
+    private class Plan(val moves: List<Move>, val leftover: Int)
+
+    private fun planFor(action: BoardAction, board: BoardState, swap: Boolean): Plan =
         if (action == BoardAction.SORT) {
-            BoardPlanner.planSort(board.ids, board.values, settings.swap)
+            val sort = BoardPlanner.planSort(board.ids, board.values, swap)
+            Plan(sort.moves, sort.leftover)
         } else {
-            BoardPlanner.planMerge(board.ids, board.values)
+            Plan(BoardPlanner.planMerge(board.ids, board.values), 0)
         }
 
-    private fun describePlan(title: String, moves: List<Move>, known: Int, unknown: Int): String {
+    private fun describePlan(title: String, plan: Plan, board: BoardState): String {
+        val moves = plan.moves
+        val known = board.known
+        val unknown = board.unknown
         val sb = StringBuilder()
         sb.append("$title: ${moves.size} move(s)\n")
-        sb.append("$known tiles read confidently, $unknown unsure or unreadable (left alone).\n\n")
+        sb.append("$known tiles read confidently, $unknown unsure or unreadable (left alone).\n")
+        if (title == "Sort") {
+            val swaps = BoardPlanner.countDropsOnTiles(board.ids, board.values, moves)
+            sb.append("$swaps of these drop onto another tile (always a different level); the rest go to empty squares.\n")
+        }
+        if (plan.leftover > 0) {
+            sb.append("${plan.leftover} square(s) can't be fixed: there is no empty square to move tiles through.\n")
+        }
+        sb.append("\n")
         moves.take(25).forEachIndexed { i, m ->
             sb.append("${i + 1}. box ${m.from} to box ${m.to}  (${m.note})\n")
         }
@@ -431,16 +445,20 @@ class AutomationService : AccessibilityService() {
                     return@scanBoard
                 }
                 val title = if (action == BoardAction.SORT) "Sort" else "Merge chain"
-                val moves = planFor(action, board, settings)
+                val plan = planFor(action, board, settings.swap)
+                val moves = plan.moves
                 if (settings.previewOnly) {
-                    PlanStore.save(applicationContext, describePlan(title, moves, board.known, board.unknown))
+                    PlanStore.save(applicationContext, describePlan(title, plan, board))
                     endJob("Plan ready. Open MyApp to see it. Nothing was moved.")
                     return@scanBoard
                 }
                 if (moves.isEmpty()) {
                     endJob(
-                        if (action == BoardAction.SORT) "Nothing to sort: the readable tiles are already in order"
-                        else "No pair to merge among the tiles that were read confidently"
+                        when {
+                            action == BoardAction.MERGE -> "No pair to merge among the tiles that were read confidently"
+                            plan.leftover > 0 -> "Can't sort: there is no empty square to move tiles through"
+                            else -> "Nothing to sort: the readable tiles are already in order"
+                        }
                     )
                     return@scanBoard
                 }
@@ -693,7 +711,7 @@ class AutomationService : AccessibilityService() {
                     finish("Stopped during loop $loopNo")
                     return@ensureBoard
                 }
-                val moves = planFor(action, b, settings)
+                val moves = planFor(action, b, settings.swap).moves
                 if (moves.isEmpty()) {
                     runStep(index + 1)
                     return@ensureBoard

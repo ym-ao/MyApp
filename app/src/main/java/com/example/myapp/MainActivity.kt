@@ -32,6 +32,9 @@ class MainActivity : AppCompatActivity() {
         binding.btnSetClickPoint.setOnClickListener {
             startActivity(Intent(this, ClickPointActivity::class.java))
         }
+        binding.btnManage.setOnClickListener {
+            startActivity(Intent(this, ManageActivity::class.java))
+        }
         binding.btnLibrary.setOnClickListener {
             startActivity(Intent(this, LibraryActivity::class.java))
         }

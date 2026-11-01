@@ -19,26 +19,30 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
- * Reads the number printed on each calibrated tile.
+ * Reads the level of every calibrated tile.
  *
- * 1. Empty cells are skipped: an empty cell is a perfectly flat color, a tile
- *    never is.
- * 2. For each tile we crop the area where the number sits (lower right), and
- *    make three differently-processed copies of it.
- * 3. Each copy goes through on-device text recognition. A number only counts as
- *    "read" when at least two copies agree; one lone answer is "unsure".
+ * 1. Empty cells are skipped: an empty cell is a perfectly flat color, a tile never is.
+ * 2. We find where the number really is inside the box (calibration is never exact) and
+ *    compare a picture of it with the pictures you have locked in the Tile Library. A
+ *    clear match gives the level straight away.
+ * 3. Otherwise the number is read as text: three differently-processed copies go through
+ *    on-device text recognition, and a number only counts as "read" when at least two
+ *    agree; one lone answer is "unsure". Every tile seen is added to the library so it can
+ *    be given a level (and locked) later.
  *
- * All sizes are relative to the spacing between tiles, so this works at any
- * screen resolution.
+ * All sizes are relative to the spacing between tiles, so this works at any resolution.
  */
 object GridReader {
 
-    // Main window (also the yellow box shown on the result screen),
-    // in "cell" units measured from the tile center.
+    // Fallback window for the number, in "cell" units from the tile centre.
     private const val CROP_LEFT = -0.10f
     private const val CROP_TOP = 0.02f
     private const val CROP_RIGHT = 0.50f
     private const val CROP_BOTTOM = 0.50f
+
+    // Half the size of the window around a number that was located, in cells.
+    private const val HALF_W = 0.32f
+    private const val HALF_H = 0.26f
 
     // Below this brightness variation a cell counts as empty.
     private const val EMPTY_STD = 10.0
@@ -71,32 +75,34 @@ object GridReader {
         boxes.forEachIndexed { index, box ->
             val cx = box.x * sx
             val cy = box.y * sy
-            val l = max(0f, cx + CROP_LEFT * cell)
-            val t = max(0f, cy + CROP_TOP * cell)
-            val r = min(screenshot.width.toFloat(), cx + CROP_RIGHT * cell)
-            val b = min(screenshot.height.toFloat(), cy + CROP_BOTTOM * cell)
+
+            val empty = isEmpty(screenshot, cx, cy, cell)
+            val look = if (empty) null else TileVision.look(screenshot, cx, cy, cell)
+
+            // the area that is scanned (shown as a yellow box on the result screen)
+            val l = max(0f, cx + (if (look != null) look.centerX - HALF_W else CROP_LEFT) * cell)
+            val t = max(0f, cy + (if (look != null) look.centerY - HALF_H else CROP_TOP) * cell)
+            val r = min(screenshot.width.toFloat(), cx + (if (look != null) look.centerX + HALF_W else CROP_RIGHT) * cell)
+            val b = min(screenshot.height.toFloat(), cy + (if (look != null) look.centerY + HALF_H else CROP_BOTTOM) * cell)
 
             fun reading(value: Int?, status: ReadStatus, raw: String) =
                 Reading(box.id, cx, cy, value, status, raw, l, t, r, b)
 
-            if (isEmpty(screenshot, cx, cy, cell)) {
+            if (empty) {
                 finishTile(index, reading(null, ReadStatus.EMPTY, ""))
                 return@forEachIndexed
             }
 
             // A picture you have locked in the library needs no text reading.
-            val thumb = crop(screenshot, cx, cy, cell, CROP_LEFT, CROP_TOP, CROP_RIGHT, CROP_BOTTOM)
-                ?.let { TileLibrary.makeThumb(it) }
-            val feature = thumb?.let { TileLibrary.featureOf(it) }
-            if (feature != null) {
-                val lockedValue = TileLibrary.lookupLocked(library, feature)
+            if (look != null) {
+                val lockedValue = TileLibrary.lookupLocked(library, look)
                 if (lockedValue != null) {
                     finishTile(index, reading(lockedValue, ReadStatus.READ, "library"))
                     return@forEachIndexed
                 }
             }
 
-            val variants = makeVariants(screenshot, cx, cy, cell)
+            val variants = makeVariants(screenshot, cx, cy, cell, look)
             if (variants.isEmpty()) {
                 finishTile(index, reading(null, ReadStatus.UNREADABLE, "(outside screen)"))
                 return@forEachIndexed
@@ -115,20 +121,18 @@ object GridReader {
                                 (it ?: "").replace("\n", " ").trim()
                             }
                             if (votes.isEmpty()) {
-                                if (feature != null && thumb != null) {
-                                    TileLibrary.observe(context, feature, thumb, null, null)
-                                }
+                                if (look != null) TileLibrary.observe(context, look, null, null)
                                 finishTile(index, reading(null, ReadStatus.UNREADABLE, raw))
                             } else {
                                 val top = votes.groupingBy { it }.eachCount()
                                     .maxByOrNull { it.value }!!
                                 val status =
                                     if (top.value >= 2) ReadStatus.READ else ReadStatus.LOW_CONFIDENCE
-                                if (feature != null && thumb != null) {
+                                if (look != null) {
                                     if (status == ReadStatus.READ) {
-                                        TileLibrary.observe(context, feature, thumb, top.key, null)
+                                        TileLibrary.observe(context, look, top.key, null)
                                     } else {
-                                        TileLibrary.observe(context, feature, thumb, null, top.key)
+                                        TileLibrary.observe(context, look, null, top.key)
                                     }
                                 }
                                 finishTile(index, reading(top.key, status, raw))
@@ -150,14 +154,7 @@ object GridReader {
     }
 
     /** How many calibrated cells currently have no tile (fast: no text reading involved). */
-    fun countEmpty(profile: GridProfile, screenshot: Bitmap): Int {
-        val boxes = profile.allBoxes()
-        if (boxes.isEmpty()) return 0
-        val sx = screenshot.width.toFloat() / profile.screenWidth
-        val sy = screenshot.height.toFloat() / profile.screenHeight
-        val cell = estimateCell(boxes, profile.screenWidth * 0.04f) * (sx + sy) / 2f
-        return boxes.count { isEmpty(screenshot, it.x * sx, it.y * sy, cell) }
-    }
+    fun countEmpty(profile: GridProfile, screenshot: Bitmap): Int = emptyIds(profile, screenshot).size
 
     /**
      * A tile number is 1 or 2 digits. Anything longer (e.g. "389") means stray
@@ -174,20 +171,29 @@ object GridReader {
     }
 
     /** Three differently-processed crops of the number area. */
-    private fun makeVariants(src: Bitmap, cx: Float, cy: Float, cell: Float): List<Bitmap> {
+    private fun makeVariants(
+        src: Bitmap, cx: Float, cy: Float, cell: Float, look: TileVision.Look?
+    ): List<Bitmap> {
         val list = mutableListOf<Bitmap>()
+        val fixed = crop(src, cx, cy, cell, CROP_LEFT, CROP_TOP, CROP_RIGHT, CROP_BOTTOM)
 
-        // 1) main window, just enlarged
-        crop(src, cx, cy, cell, CROP_LEFT, CROP_TOP, CROP_RIGHT, CROP_BOTTOM)?.let {
-            list.add(scale(it, 4))
-        }
-        // 2) main window, grayscale with stretched contrast, with a margin
-        crop(src, cx, cy, cell, CROP_LEFT, CROP_TOP, CROP_RIGHT, CROP_BOTTOM)?.let {
-            list.add(pad(stretch(scale(it, 5), false)))
-        }
-        // 3) window nudged down-right (forgives a slightly off calibration), inverted
-        crop(src, cx, cy, cell, -0.05f, 0.05f, 0.55f, 0.55f)?.let {
-            list.add(pad(stretch(scale(it, 5), true)))
+        if (look != null) {
+            val l = look.centerX - HALF_W
+            val r = look.centerX + HALF_W
+            val t = look.centerY - HALF_H
+            val b = look.centerY + HALF_H
+            // 1) the window around where the number really is, just enlarged
+            crop(src, cx, cy, cell, l, t, r, b)?.let { list.add(scale(it, 4)) }
+            // 2) the fixed window, grayscale with stretched contrast
+            fixed?.let { list.add(pad(stretch(scale(it, 5), false))) }
+            // 3) a slightly wider window around the number, inverted
+            crop(src, cx, cy, cell, l - 0.05f, t - 0.05f, r + 0.05f, b + 0.05f)
+                ?.let { list.add(pad(stretch(scale(it, 5), true))) }
+        } else {
+            fixed?.let { list.add(scale(it, 4)) }
+            fixed?.let { list.add(pad(stretch(scale(it, 5), false))) }
+            crop(src, cx, cy, cell, -0.05f, 0.05f, 0.55f, 0.55f)
+                ?.let { list.add(pad(stretch(scale(it, 5), true))) }
         }
         return list
     }

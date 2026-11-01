@@ -42,6 +42,12 @@
             android:text="Set Click Point" />
 
         <Button
+            android:id="@+id/btnManage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Saved Grids &amp; Click Points (use or delete)" />
+
+        <Button
             android:id="@+id/btnLibrary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

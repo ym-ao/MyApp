@@ -32,6 +32,11 @@
             android:label="Set Up Grid" />
 
         <activity
+            android:name=".ManageActivity"
+            android:exported="false"
+            android:label="Saved Grids and Click Points" />
+
+        <activity
             android:name=".LibraryActivity"
             android:exported="false"
             android:label="Tile Library" />

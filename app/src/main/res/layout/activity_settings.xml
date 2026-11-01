@@ -131,7 +131,7 @@
             android:id="@+id/checkSwap"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Dropping a tile on a different tile swaps them" />
+            android:text="Swap tiles when sorting: dropping a tile on a tile of a different level swaps them (the sort never drops on the same level). Unticked: only drop on empty squares." />
 
         <CheckBox
             android:id="@+id/checkVerify"
