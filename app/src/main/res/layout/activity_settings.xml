@@ -51,50 +51,165 @@
             android:id="@+id/btnTestExtra"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Test tap on the extra point (5 s countdown)" />
+            android:text="Test tap on the extra point" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="16dp"
-            android:text="Speed"
+            android:text="Times (all in milliseconds)"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Drag duration (ms): how long each drag takes"
-            android:textSize="12sp" />
-
-        <EditText
-            android:id="@+id/dragMsInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="number" />
+            android:textSize="12sp"
+            android:text="Type the same number in both boxes for a fixed time, or a range (for example 500 and 1000) to use a random time in that range every time." />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Pause after each move (ms), also the delay per merge"
+            android:paddingTop="6dp"
+            android:text="Drag duration: how long each drag takes"
             android:textSize="12sp" />
 
-        <EditText
-            android:id="@+id/pauseMsInput"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number" />
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/dragMinInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="from (ms)"
+                android:inputType="number" />
+
+            <EditText
+                android:id="@+id/dragMaxInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="to (ms)"
+                android:inputType="number" />
+        </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Longest summon hold (seconds)"
+            android:paddingTop="6dp"
+            android:text="Pause after each move (also the delay per merge)"
             android:textSize="12sp" />
 
-        <EditText
-            android:id="@+id/maxHoldInput"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number" />
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/pauseMinInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="from (ms)"
+                android:inputType="number" />
+
+            <EditText
+                android:id="@+id/pauseMaxInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="to (ms)"
+                android:inputType="number" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:text="Longest summon hold"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/holdMinInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="from (ms)"
+                android:inputType="number" />
+
+            <EditText
+                android:id="@+id/holdMaxInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="to (ms)"
+                android:inputType="number" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:text="Pause between loops"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/loopPauseMinInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="from (ms)"
+                android:inputType="number" />
+
+            <EditText
+                android:id="@+id/loopPauseMaxInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="to (ms)"
+                android:inputType="number" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:text="Countdown before a test button starts (time to switch to the game)"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/countdownMinInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="from (ms)"
+                android:inputType="number" />
+
+            <EditText
+                android:id="@+id/countdownMaxInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="to (ms)"
+                android:inputType="number" />
+        </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
@@ -111,18 +226,6 @@
 
         <EditText
             android:id="@+id/loopsInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="number" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Pause between loops (ms)"
-            android:textSize="12sp" />
-
-        <EditText
-            android:id="@+id/loopPauseInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:inputType="number" />

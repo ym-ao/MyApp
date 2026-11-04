@@ -32,6 +32,11 @@
             android:label="Set Up Grid" />
 
         <activity
+            android:name=".ActionsActivity"
+            android:exported="false"
+            android:label="Custom Clicks and Drags" />
+
+        <activity
             android:name=".ManageActivity"
             android:exported="false"
             android:label="Saved Grids and Click Points" />

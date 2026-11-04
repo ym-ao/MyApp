@@ -32,6 +32,9 @@ class MainActivity : AppCompatActivity() {
         binding.btnSetClickPoint.setOnClickListener {
             startActivity(Intent(this, ClickPointActivity::class.java))
         }
+        binding.btnActions.setOnClickListener {
+            startActivity(Intent(this, ActionsActivity::class.java))
+        }
         binding.btnManage.setOnClickListener {
             startActivity(Intent(this, ManageActivity::class.java))
         }
@@ -52,22 +55,22 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnStartLoop.setOnClickListener {
             val service = needService() ?: return@setOnClickListener
-            service.startLoopAfterDelay(5000L)
+            service.startLoopAfterDelay(countdown())
             moveTaskToBack(true)
         }
         binding.btnMerge.setOnClickListener {
             val service = needService() ?: return@setOnClickListener
-            service.runBoardAction(BoardAction.MERGE, 5000L)
+            service.runBoardAction(BoardAction.MERGE, countdown())
             moveTaskToBack(true)
         }
         binding.btnSort.setOnClickListener {
             val service = needService() ?: return@setOnClickListener
-            service.runBoardAction(BoardAction.SORT, 5000L)
+            service.runBoardAction(BoardAction.SORT, countdown())
             moveTaskToBack(true)
         }
         binding.btnHoldSummon.setOnClickListener {
             val service = needService() ?: return@setOnClickListener
-            service.holdSummonAfterDelay(5000L)
+            service.holdSummonAfterDelay(countdown())
             moveTaskToBack(true)
         }
         binding.btnTestTap.setOnClickListener {
@@ -77,7 +80,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Choose the summon click point in Loop Settings first", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            service.tapPointAfterDelay(point, 5000L)
+            service.tapPointAfterDelay(point, countdown())
             moveTaskToBack(true)
         }
         binding.btnReadGrid.setOnClickListener {
@@ -91,7 +94,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Choose a grid in Loop Settings first", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            service.readGridAfterDelay(grid, 5000L)
+            service.readGridAfterDelay(grid, countdown())
             moveTaskToBack(true)
         }
     }
@@ -102,6 +105,9 @@ class MainActivity : AppCompatActivity() {
         fillInDefaults()
         showPendingPlan()
     }
+
+    /** The wait before a test starts, so there is time to switch to the game (milliseconds). */
+    private fun countdown(): Long = SettingsStore.load(this).countdown.pick()
 
     private fun needService(): AutomationService? {
         val service = AutomationService.instance

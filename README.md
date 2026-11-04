@@ -66,6 +66,17 @@ Lists every saved grid and click point with its details. Tap one to use it (as t
 
 Every tile the reader looks at is remembered as a small picture of its number. In **Tile Library** you give pictures a level and lock them. The reader first finds where the number really is inside the box (calibrated points are a few pixels off, differently in each box), cuts out an aligned picture, and compares it with your locked pictures. A clear match (similarity 0.91 or more, and no other level nearly as close) gives the level straight away, in any box, with no text reading, which also makes scans faster. Only if nothing matches is the number read as text, and the text reading also uses the located spot. Several pictures can share one level, because the background behind the number changes. Confident reads are saved as "not confirmed", unsure or unreadable ones as "needs a level" (with the reader's guess shown). Typical use: tap **Read Grid Numbers**, open Tile Library, fix the "needs a level" pictures, check the rest, and lock them (or **Lock all with a level** once checked). Pictures saved by the first version are re-aligned automatically.
 
+## Times in milliseconds, with random ranges (built, needs on-device testing)
+
+Every time in the app is in milliseconds (drag duration, pause after each move, longest summon hold, pause between loops, the countdown before a test button starts, and the times of each custom click or drag). Each one has a **from** and a **to** box: the same number in both is a fixed time; a range such as 500 and 1000 uses a new random time in that range every time it is needed. Settings saved by earlier versions are converted automatically (seconds became milliseconds).
+
+## Custom clicks & drags, auto-clicker style (built, needs on-device testing)
+
+- The floating panel now has **+ Click**, **+ Drag**, **Points** (show or hide the markers), **Start**, **Stop** and **Hide**. Tap **+ Click** and a numbered marker appears; drag it onto the spot you want clicked. **+ Drag** gives two markers, a (start) and b (end). Positions are saved when you let go of a marker.
+- **Custom Clicks & Drags** (main screen) shows the list: change each action's press length or drag duration and its wait afterwards (each a from/to range in milliseconds), reorder, delete, set how many times the whole list repeats, and run it.
+- The list is also a loop step, **Custom clicks & drags**, in Loop Settings, so it can run before or after the merge, sort and summon steps. Untick the other steps and it works as a plain auto clicker.
+- Markers are hidden while anything runs, because a marker sitting on a spot would catch the touch instead of the game. Clicks and drags are only valid in the screen orientation they were recorded in.
+
 ## Loop, step order, settings and floating panel (built, needs on-device testing)
 
 - **Loop Settings & Step Order** (main screen): pick the grid, the summon click point and an optional extra click point; set drag duration, pause after each move, longest summon hold, number of loops (0 = until stopped or nothing is left to do) and the pause between loops; tick and reorder the steps (Merge chain, Sort board, Summon, Extra click). Settings save when you leave the screen.

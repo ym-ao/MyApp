@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.Toast
@@ -16,6 +17,7 @@ import com.example.myapp.databinding.ActivitySettingsBinding
 import com.example.myapp.storage.AppSettings
 import com.example.myapp.storage.ClickPointStorage
 import com.example.myapp.storage.GridStorage
+import com.example.myapp.storage.MsRange
 import com.example.myapp.storage.SettingsStore
 import com.example.myapp.storage.StepConfig
 import com.example.myapp.storage.StepType
@@ -40,11 +42,12 @@ class SettingsActivity : AppCompatActivity() {
         fillSpinner(binding.summonSpinner, ClickPointStorage.list(this), s.summonPoint, true)
         fillSpinner(binding.extraSpinner, ClickPointStorage.list(this), s.extraPoint, true)
 
-        binding.dragMsInput.setText(s.dragMs.toString())
-        binding.pauseMsInput.setText(s.pauseMs.toString())
-        binding.maxHoldInput.setText(s.maxHoldSeconds.toString())
+        showRange(binding.dragMinInput, binding.dragMaxInput, s.drag)
+        showRange(binding.pauseMinInput, binding.pauseMaxInput, s.pause)
+        showRange(binding.holdMinInput, binding.holdMaxInput, s.maxHold)
+        showRange(binding.loopPauseMinInput, binding.loopPauseMaxInput, s.loopPause)
+        showRange(binding.countdownMinInput, binding.countdownMaxInput, s.countdown)
         binding.loopsInput.setText(s.loops.toString())
-        binding.loopPauseInput.setText(s.loopPauseMs.toString())
         binding.checkSwap.isChecked = s.swap
         binding.checkVerify.isChecked = s.verify
         binding.checkPreview.isChecked = s.previewOnly
@@ -61,7 +64,7 @@ class SettingsActivity : AppCompatActivity() {
                 service == null -> toast("Turn on the accessibility service first")
                 point == null || point == none -> toast("Choose an extra click point first")
                 else -> {
-                    service.tapPointAfterDelay(point, 5000L)
+                    service.tapPointAfterDelay(point, SettingsStore.load(this).countdown.pick())
                     moveTaskToBack(true)
                 }
             }
@@ -76,6 +79,18 @@ class SettingsActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         if (loaded) save()
+    }
+
+    private fun showRange(minInput: EditText, maxInput: EditText, r: MsRange) {
+        minInput.setText(r.min.toString())
+        maxInput.setText(r.max.toString())
+    }
+
+    /** A blank or invalid box keeps the old value; the second box can't be below the first. */
+    private fun readRange(minInput: EditText, maxInput: EditText, old: MsRange, lo: Long, hi: Long): MsRange {
+        val min = minInput.text.toString().toLongOrNull()?.coerceIn(lo, hi) ?: old.min
+        val max = (maxInput.text.toString().toLongOrNull()?.coerceIn(lo, hi) ?: old.max).coerceAtLeast(min)
+        return MsRange(min, max)
     }
 
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
@@ -97,6 +112,7 @@ class SettingsActivity : AppCompatActivity() {
         StepType.SORT -> "Sort board"
         StepType.SUMMON -> "Summon (hold until grid full)"
         StepType.CLICK -> "Extra click (taps the extra point once)"
+        StepType.CUSTOM -> "Custom clicks & drags (the ones you recorded)"
     }
 
     /** Draws one row per step: tick box, then move up / move down. */
@@ -143,14 +159,15 @@ class SettingsActivity : AppCompatActivity() {
             grid = spinnerValue(binding.gridSpinner),
             summonPoint = spinnerValue(binding.summonSpinner),
             extraPoint = spinnerValue(binding.extraSpinner),
-            dragMs = binding.dragMsInput.text.toString().toLongOrNull()?.coerceIn(30L, 2000L) ?: old.dragMs,
-            pauseMs = binding.pauseMsInput.text.toString().toLongOrNull()?.coerceIn(0L, 5000L) ?: old.pauseMs,
+            drag = readRange(binding.dragMinInput, binding.dragMaxInput, old.drag, 30L, 5000L),
+            pause = readRange(binding.pauseMinInput, binding.pauseMaxInput, old.pause, 0L, 60000L),
             swap = binding.checkSwap.isChecked,
             verify = binding.checkVerify.isChecked,
             previewOnly = binding.checkPreview.isChecked,
-            maxHoldSeconds = binding.maxHoldInput.text.toString().toIntOrNull()?.coerceIn(5, 300) ?: old.maxHoldSeconds,
+            maxHold = readRange(binding.holdMinInput, binding.holdMaxInput, old.maxHold, 500L, 600000L),
             loops = binding.loopsInput.text.toString().toIntOrNull()?.coerceIn(0, 100000) ?: old.loops,
-            loopPauseMs = binding.loopPauseInput.text.toString().toLongOrNull()?.coerceIn(0L, 60000L) ?: old.loopPauseMs,
+            loopPause = readRange(binding.loopPauseMinInput, binding.loopPauseMaxInput, old.loopPause, 0L, 600000L),
+            countdown = readRange(binding.countdownMinInput, binding.countdownMaxInput, old.countdown, 0L, 60000L),
             steps = steps.toList()
         )
         SettingsStore.save(this, s)

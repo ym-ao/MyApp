@@ -42,6 +42,12 @@
             android:text="Set Click Point" />
 
         <Button
+            android:id="@+id/btnActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Custom Clicks &amp; Drags (auto-clicker style)" />
+
+        <Button
             android:id="@+id/btnManage"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -76,7 +82,7 @@
             android:id="@+id/btnStartLoop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Start Loop (5 s countdown)" />
+            android:text="Start Loop (after the countdown)" />
 
         <TextView
             android:layout_width="match_parent"
@@ -89,7 +95,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="16dp"
-            android:text="Test one piece at a time (5 s countdown each, then switch to the game)"
+            android:text="Test one piece at a time (a countdown first, set in Loop Settings, then switch to the game)"
             android:textStyle="bold" />
 
         <Button
