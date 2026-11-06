@@ -18,6 +18,9 @@ enum class BoardAction { SORT, MERGE }
 /** The drags for a sort, and how many squares could not be fixed (no empty square to work with). */
 class SortPlan(val moves: List<Move>, val leftover: Int)
 
+/** One planned merge, and the destination / carrier box to remember for the next one. */
+class NextMerge(val move: Move, val newDest: Int?, val newCarrier: Int?)
+
 /**
  * The board as the app currently believes it to be. It is built from one scan, then
  * updated in place as moves are made, so later steps don't need another scan.
@@ -256,35 +259,71 @@ object BoardPlanner {
     }
 
     /**
-     * Takes the lowest tile (last in box order if tied) that has a twin, merges it onto
-     * the twin with the lowest box number, and that box stays the destination: while another
-     * tile of the new level exists (taken from the end of the board), it is dragged
-     * onto the destination too. A lowest tile with no twin is skipped in favour of the next-lowest.
+     * The next single merge of a merge chain, or null when the chain is over.
+     *
+     * 1. Start: take the lowest tile (the last one in box order if tied). Merge it onto its
+     *    neighbour in the previous box if that has the same level, otherwise onto the last
+     *    other tile of that level. That result is the "carrier": it is NOT the destination.
+     * 2. Carrier: merge the carrier onto the highest-ranked (lowest box number) other tile of
+     *    its level. That tile is the destination from now on.
+     * 3. Destination: while another tile of the destination's current level exists (taken from
+     *    the end of the board), merge it onto the destination.
+     *
+     * This only plans ONE merge from the board as it is now. Run it, read the board again, and
+     * ask again: the game upgrades other tiles when tiles merge, so a long plan made in advance
+     * would go wrong. Unreadable tiles are never used.
      */
-    fun planMerge(ids: List<Int>, values: IntArray): List<Move> {
+    fun planNextMerge(ids: List<Int>, values: IntArray, dest: Int?, carrier: Int?): NextMerge? {
         val n = ids.size
-        val cur = values.copyOf()
-        val order = (0 until n).filter { cur[it] > 0 }
-            .sortedWith(compareBy<Int>({ cur[it] }, { -it }))
+        val index = HashMap<Int, Int>()
+        ids.forEachIndexed { p, id -> index[id] = p }
 
-        val moves = mutableListOf<Move>()
+        if (dest != null) {
+            val d = index[dest] ?: return null
+            val level = values[d]
+            if (level <= 0) return null
+            val q = (n - 1 downTo 0).firstOrNull { it != d && values[it] == level } ?: return null
+            return NextMerge(Move(ids[q], ids[d], "merge two $level into a ${level + 1}", true), dest, null)
+        }
+
+        if (carrier != null) {
+            val c = index[carrier] ?: return null
+            val level = values[c]
+            if (level <= 0) return null
+            val t = (0 until n).firstOrNull { it != c && values[it] == level } ?: return null
+            return NextMerge(
+                Move(ids[c], ids[t], "merge two $level into a ${level + 1} (this box becomes the destination)", true),
+                ids[t], null
+            )
+        }
+
+        val order = (0 until n).filter { values[it] > 0 }
+            .sortedWith(compareBy<Int>({ values[it] }, { -it }))
         for (s in order) {
-            val d = (0 until n).firstOrNull { it != s && cur[it] == cur[s] } ?: continue
-            val first = cur[s]
-            moves.add(Move(ids[s], ids[d], "merge two $first into a ${first + 1}", true))
-            cur[d] = first + 1
-            cur[s] = 0
+            val level = values[s]
+            val partner = (if (s > 0 && values[s - 1] == level) s - 1 else null)
+                ?: (n - 1 downTo 0).firstOrNull { it != s && values[it] == level }
+                ?: continue
+            return NextMerge(
+                Move(ids[s], ids[partner], "merge the lowest two $level into a ${level + 1} (not the destination)", true),
+                null, ids[partner]
+            )
+        }
+        return null
+    }
 
-            var guard = 0
-            while (guard < 200 && cur[d] < 99) {
-                guard++
-                val level = cur[d]
-                val q = (n - 1 downTo 0).firstOrNull { it != d && cur[it] == level } ?: break
-                moves.add(Move(ids[q], ids[d], "merge two $level into a ${level + 1}", true))
-                cur[d] = level + 1
-                cur[q] = 0
-            }
-            break
+    /** What a merge chain would do if merging were the only thing that changed the board (for the preview). */
+    fun simulateMerges(ids: List<Int>, values: IntArray, maxSteps: Int = 60): List<Move> {
+        val cur = values.copyOf()
+        val moves = mutableListOf<Move>()
+        var dest: Int? = null
+        var carrier: Int? = null
+        while (moves.size < maxSteps) {
+            val next = planNextMerge(ids, cur, dest, carrier) ?: break
+            applyMoves(ids, cur, listOf(next.move))
+            moves.add(next.move)
+            dest = next.newDest
+            carrier = next.newCarrier
         }
         return moves
     }

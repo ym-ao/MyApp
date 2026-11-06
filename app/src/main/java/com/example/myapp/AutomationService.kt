@@ -249,10 +249,15 @@ class AutomationService : AccessibilityService() {
     }
 
     /** Screenshot, read every tile, and describe the board. */
-    private fun scanBoard(profile: GridProfile, onResult: (BoardState?, String?) -> Unit) {
+    private fun scanBoard(profile: GridProfile, attemptsLeft: Int = 3, onResult: (BoardState?, String?) -> Unit) {
         captureScreen { bitmap, error ->
             if (bitmap == null) {
-                onResult(null, error ?: "Screenshot failed")
+                if (attemptsLeft > 1) {
+                    // Android allows about one screenshot per second; try again shortly
+                    mainHandler.postDelayed({ scanBoard(profile, attemptsLeft - 1, onResult) }, 500L)
+                } else {
+                    onResult(null, error ?: "Screenshot failed")
+                }
                 return@captureScreen
             }
             if (!gridMatchesScreen(profile, bitmap)) {
@@ -266,6 +271,64 @@ class AutomationService : AccessibilityService() {
                 onResult(BoardState.build(profile, bitmap.width, bitmap.height, readings), null)
             }
         }
+    }
+
+    private class MergeState(var dest: Int? = null, var carrier: Int? = null)
+
+    /**
+     * Runs a merge chain one merge at a time: plan ONE merge from the board as it is, drag, wait,
+     * read the board again, and ask again. Reading again after every merge is what lets it cope
+     * with the game's own upgrades (other tiles change level when tiles merge). It ends when no
+     * tile of the destination's level is left. Calls back with the last board that was read, the
+     * number of merges done, and an error message (null when it ended normally).
+     */
+    private fun mergeUntilDone(
+        profile: GridProfile,
+        first: BoardState,
+        settings: AppSettings,
+        onFinished: (BoardState?, Int, String?) -> Unit
+    ) {
+        val state = MergeState()
+        var merges = 0
+
+        fun step(board: BoardState) {
+            if (stopRequested) {
+                onFinished(board, merges, "Stopped after $merges merge(s)")
+                return
+            }
+            if (merges >= 300) {
+                onFinished(board, merges, null)
+                return
+            }
+            val next = BoardPlanner.planNextMerge(board.ids, board.values, state.dest, state.carrier)
+            if (next == null) {
+                onFinished(board, merges, null)
+                return
+            }
+            setPanelStatus("merge ${merges + 1}")
+            performMoves(profile, board, listOf(next.move), settings.drag, settings.pause, false) { ok, message ->
+                if (!ok) {
+                    onFinished(null, merges, message)
+                    return@performMoves
+                }
+                merges++
+                scanBoard(profile) { fresh, error ->
+                    if (fresh == null) {
+                        onFinished(null, merges, error ?: "Couldn't read the board")
+                        return@scanBoard
+                    }
+                    val sourceNow = fresh.values[fresh.ids.indexOf(next.move.from)]
+                    if (sourceNow != BoardPlanner.EMPTY) {
+                        onFinished(fresh, merges, "Merge $merges: box ${next.move.from} still has a tile, so the merge didn't happen")
+                        return@scanBoard
+                    }
+                    state.dest = next.newDest
+                    state.carrier = next.newCarrier
+                    step(fresh)
+                }
+            }
+        }
+        step(first)
     }
 
     /** Performs the drags one after another, pausing between them. */
@@ -361,7 +424,7 @@ class AutomationService : AccessibilityService() {
             val sort = BoardPlanner.planSort(board.ids, board.values, swap)
             Plan(sort.moves, sort.leftover)
         } else {
-            Plan(BoardPlanner.planMerge(board.ids, board.values), 0)
+            Plan(BoardPlanner.simulateMerges(board.ids, board.values), 0)
         }
 
     private fun describePlan(title: String, plan: Plan, board: BoardState): String {
@@ -371,6 +434,9 @@ class AutomationService : AccessibilityService() {
         val sb = StringBuilder()
         sb.append("$title: ${moves.size} move(s)\n")
         sb.append("$known tiles read confidently, $unknown unsure or unreadable (left alone).\n")
+        if (title == "Merge chain") {
+            sb.append("The real run reads the board again after every merge, so steps after the first few depend on what the game does (for example its upgrades). This preview assumes nothing else changes.\n")
+        }
         if (title == "Sort") {
             val swaps = BoardPlanner.countDropsOnTiles(board.ids, board.values, moves)
             sb.append("$swaps of these drop onto another tile (always a different level); the rest go to empty squares.\n")
@@ -465,6 +531,12 @@ class AutomationService : AccessibilityService() {
                             else -> "Nothing to sort: the readable tiles are already in order"
                         }
                     )
+                    return@scanBoard
+                }
+                if (action == BoardAction.MERGE) {
+                    mergeUntilDone(profile, board, settings) { _, merges, error ->
+                        endJob(error ?: "Merge chain finished: $merges merge(s)")
+                    }
                     return@scanBoard
                 }
                 performMoves(profile, board, moves, settings.drag, settings.pause, settings.verify) { ok, message ->
@@ -690,7 +762,7 @@ class AutomationService : AccessibilityService() {
                 return
             }
             when (steps[index]) {
-                StepType.MERGE -> boardStep(index, BoardAction.MERGE)
+                StepType.MERGE -> mergeStep(index)
                 StepType.SORT -> boardStep(index, BoardAction.SORT)
                 StepType.SUMMON -> summonStep(index)
                 StepType.CLICK -> clickStep(index)
@@ -713,6 +785,29 @@ class AutomationService : AccessibilityService() {
                 }
                 board = scanned
                 onReady(scanned)
+            }
+        }
+
+        private fun mergeStep(index: Int) {
+            ensureBoard { b ->
+                if (stopRequested) {
+                    finish("Stopped during loop $loopNo")
+                    return@ensureBoard
+                }
+                if (BoardPlanner.planNextMerge(b.ids, b.values, null, null) == null) {
+                    runStep(index + 1)
+                    return@ensureBoard
+                }
+                setPanelStatus("${label()}: merging")
+                mergeUntilDone(profile, b, settings) { last, merges, error ->
+                    if (merges > 0) didWork = true
+                    if (last != null) board = last   // freshly read, so the sort can start from it
+                    if (error != null) {
+                        finish("Loop $loopNo: $error")
+                        return@mergeUntilDone
+                    }
+                    runStep(index + 1)
+                }
             }
         }
 
