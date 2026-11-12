@@ -273,6 +273,67 @@ class AutomationService : AccessibilityService() {
         }
     }
 
+    /**
+     * Sorts in passes: plan from the board as it is, do (at most a set number of) the drags, read the
+     * board again, and plan again, until it is sorted or the passes are used up. Reading again between
+     * passes means a lag spike that made a drag miss is simply corrected by the next pass, instead of
+     * leaving the rest of an old plan to run on a board that is no longer what it expected.
+     * Calls back with the last board known (null if it must be read again), the number of drags
+     * done, and an error message (null when it ended normally).
+     */
+    private fun sortPasses(
+        profile: GridProfile,
+        first: BoardState?,
+        settings: AppSettings,
+        onFinished: (BoardState?, Int, String?) -> Unit
+    ) {
+        var total = 0
+
+        fun pass(n: Int, board: BoardState?) {
+            if (stopRequested) {
+                onFinished(board, total, "Stopped after $total sort drag(s)")
+                return
+            }
+            if (board == null) {
+                scanBoard(profile) { fresh, error ->
+                    if (fresh == null) onFinished(null, total, error ?: "Couldn't read the board")
+                    else pass(n, fresh)
+                }
+                return
+            }
+            var moves = BoardPlanner.planSort(board.ids, board.values, settings.swap).moves
+            if (moves.isEmpty()) {
+                onFinished(board, total, null)   // already sorted
+                return
+            }
+            if (settings.sortMovesPerPass > 0 && moves.size > settings.sortMovesPerPass) {
+                moves = moves.take(settings.sortMovesPerPass)
+            }
+            setPanelStatus("sort pass $n of ${settings.sortPasses}: ${moves.size} drags")
+            performMoves(profile, board, moves, settings.drag, settings.pause, false) { ok, message ->
+                if (!ok) {
+                    onFinished(null, total, message)
+                    return@performMoves
+                }
+                total += moves.size
+                BoardPlanner.applyMoves(board.ids, board.values, moves)
+                if (n < settings.sortPasses) {
+                    pass(n + 1, null)   // read the board again before the next pass
+                } else if (settings.verify) {
+                    mainHandler.postDelayed({
+                        checkBoardMatches(profile, board, 3) { good ->
+                            if (good) onFinished(board, total, null)
+                            else onFinished(null, total, "the board doesn't look the way it should after sorting")
+                        }
+                    }, settings.pause.pick() + 300L)
+                } else {
+                    onFinished(board, total, null)
+                }
+            }
+        }
+        pass(1, first)
+    }
+
     private class MergeState(var dest: Int? = null, var carrier: Int? = null)
 
     /**
@@ -554,12 +615,12 @@ class AutomationService : AccessibilityService() {
                     }
                     return@scanBoard
                 }
-                performMoves(profile, board, moves, settings.drag, settings.pause, settings.verify) { ok, message ->
-                    if (ok) {
-                        endJob("$title finished: ${moves.size} move(s). Reading the board again to check...")
-                        mainHandler.postDelayed({ captureAndRead(profile) }, 900L)
+                sortPasses(profile, board, settings) { _, total, error ->
+                    if (error != null) {
+                        endJob(error)
                     } else {
-                        endJob(message)
+                        endJob("Sort finished: $total drag(s). Reading the board again to check...")
+                        mainHandler.postDelayed({ captureAndRead(profile) }, 900L)
                     }
                 }
             }
@@ -778,7 +839,7 @@ class AutomationService : AccessibilityService() {
             }
             when (steps[index]) {
                 StepType.MERGE -> mergeStep(index)
-                StepType.SORT -> boardStep(index, BoardAction.SORT)
+                StepType.SORT -> sortStep(index)
                 StepType.SUMMON -> summonStep(index)
                 StepType.CLICK -> clickStep(index)
                 StepType.CUSTOM -> customStep(index)
@@ -826,36 +887,21 @@ class AutomationService : AccessibilityService() {
             }
         }
 
-        private fun boardStep(index: Int, action: BoardAction) {
-            val doing = if (action == BoardAction.MERGE) "merging" else "sorting"
+        private fun sortStep(index: Int) {
             ensureBoard { b ->
                 if (stopRequested) {
                     finish("Stopped during loop $loopNo")
                     return@ensureBoard
                 }
-                val moves = planFor(action, b, settings.swap).moves
-                if (moves.isEmpty()) {
+                setPanelStatus("${label()}: sorting")
+                sortPasses(profile, b, settings) { last, total, error ->
+                    if (total > 0) didWork = true
+                    board = last   // null means: read the board again when the next step needs it
+                    if (error != null) {
+                        finish("Loop $loopNo: $error")
+                        return@sortPasses
+                    }
                     runStep(index + 1)
-                    return@ensureBoard
-                }
-                setPanelStatus("${label()}: $doing (${moves.size} moves)")
-                performMoves(profile, b, moves, settings.drag, settings.pause, settings.verify) { ok, message ->
-                    if (!ok) {
-                        finish("Loop $loopNo: $message")
-                        return@performMoves
-                    }
-                    BoardPlanner.applyMoves(b.ids, b.values, moves)
-                    didWork = true
-                    if (settings.verify) {
-                        mainHandler.postDelayed({
-                            checkBoardMatches(profile, b, 3) { good ->
-                                if (good) runStep(index + 1)
-                                else finish("Loop $loopNo: the board doesn't look the way it should after $doing. Stopped.")
-                            }
-                        }, settings.pause.pick() + 300L)
-                    } else {
-                        runStep(index + 1)
-                    }
                 }
             }
         }

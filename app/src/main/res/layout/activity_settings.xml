@@ -230,6 +230,31 @@
             android:layout_height="wrap_content"
             android:inputType="number" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:text="Sort passes per loop (the board is read again between passes, so a lag spike that made a drag miss gets fixed; stops early when it is sorted)"
+            android:textSize="12sp" />
+
+        <EditText
+            android:id="@+id/sortPassesInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="number" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Most drags in one sort pass (0 = all of them). A smaller number means the board is checked more often."
+            android:textSize="12sp" />
+
+        <EditText
+            android:id="@+id/sortMovesInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="number" />
+
         <CheckBox
             android:id="@+id/checkSwap"
             android:layout_width="match_parent"

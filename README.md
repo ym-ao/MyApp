@@ -62,6 +62,10 @@ Holding is done as back-to-back 1.1 s pieces of one press, so the finger never l
 
 Lists every saved grid and click point with its details. Tap one to use it (as the current grid, summon point or extra click point) or delete it; deleting also clears it from the settings if it was in use.
 
+## Sort passes (built, needs on-device testing)
+
+Loop Settings has **Sort passes per loop** (default 3) and **Most drags in one sort pass** (default 20, 0 = all). A pass plans from the board as it is, does the drags, then the board is read again and the next pass plans from what is really there; it stops early when the board is sorted. If a lag spike makes a drag miss, the next pass corrects it instead of the rest of an old plan running on a board that changed. A smaller number of drags per pass checks the board more often (a missed drag can then affect fewer later drags). If lag spikes are frequent, also try a longer drag duration or a range for the drag and pause times, and consider unticking Swap tiles so every drag lands on an empty square.
+
 ## Speed of reading the board
 
 Text reading is slow, so it is avoided: (1) every tile picture already in the Tile Library is recognised without text reading (locked pictures match at 0.91 similarity, pictures the reader remembered by itself only when nearly identical, 0.95); a remembered picture that still has no level is reported as unreadable straight away ("library: needs a level") instead of being read again; (2) several tiles with the same new picture on one board are read as text once; (3) a third text reading is only done when the first two disagree. So the first scan on a new board is the slow one; after that, scans only look at new pictures. In Loop Settings, **Merge chain: read the board again after every merge** can be unticked for a much faster chain that trusts its own plan (it can't follow the game's upgrades).

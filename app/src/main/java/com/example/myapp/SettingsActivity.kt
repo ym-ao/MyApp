@@ -48,6 +48,8 @@ class SettingsActivity : AppCompatActivity() {
         showRange(binding.loopPauseMinInput, binding.loopPauseMaxInput, s.loopPause)
         showRange(binding.countdownMinInput, binding.countdownMaxInput, s.countdown)
         binding.loopsInput.setText(s.loops.toString())
+        binding.sortPassesInput.setText(s.sortPasses.toString())
+        binding.sortMovesInput.setText(s.sortMovesPerPass.toString())
         binding.checkSwap.isChecked = s.swap
         binding.checkVerify.isChecked = s.verify
         binding.checkReread.isChecked = s.rereadMerge
@@ -162,6 +164,8 @@ class SettingsActivity : AppCompatActivity() {
             extraPoint = spinnerValue(binding.extraSpinner),
             drag = readRange(binding.dragMinInput, binding.dragMaxInput, old.drag, 30L, 5000L),
             pause = readRange(binding.pauseMinInput, binding.pauseMaxInput, old.pause, 0L, 60000L),
+            sortPasses = binding.sortPassesInput.text.toString().toIntOrNull()?.coerceIn(1, 50) ?: old.sortPasses,
+            sortMovesPerPass = binding.sortMovesInput.text.toString().toIntOrNull()?.coerceIn(0, 500) ?: old.sortMovesPerPass,
             swap = binding.checkSwap.isChecked,
             verify = binding.checkVerify.isChecked,
             rereadMerge = binding.checkReread.isChecked,
