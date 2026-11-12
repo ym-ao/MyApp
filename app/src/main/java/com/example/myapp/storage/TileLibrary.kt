@@ -32,7 +32,8 @@ object TileLibrary {
 
     const val W = TileVision.TW
     const val H = TileVision.TH
-    const val MATCH = 0.91f
+    const val MATCH_LOCKED = 0.91f   // a picture you confirmed: a clear match is enough
+    const val MATCH_OTHER = 0.95f    // a picture the reader remembered by itself: must be nearly identical
     const val MARGIN = 0.03f
 
     private var cache: MutableList<TileEntry>? = null
@@ -124,28 +125,40 @@ object TileLibrary {
         return best
     }
 
+    /** What the library knows about a tile's picture. [value] is null when it is known but still has no level. */
+    class Hit(val value: Int?, val locked: Boolean)
+
+    private fun threshold(e: TileEntry) = if (e.locked) MATCH_LOCKED else MATCH_OTHER
+
     /**
-     * The level of a locked picture that clearly matches, or null. Refuses (null) when a
-     * locked picture of a different level is almost as close.
+     * Looks a tile's picture up among ALL remembered pictures (so the same picture never needs
+     * text reading twice). Locked pictures match at [MATCH_LOCKED], the reader's own memories only
+     * when nearly identical ([MATCH_OTHER]). Returns null when nothing matches, or when two pictures
+     * with different levels are almost equally close (then the text reader decides).
      */
-    fun lookupLocked(list: List<TileEntry>, look: TileVision.Look): Int? {
-        var bestValue: Int? = null
-        var best = -1f
+    fun lookup(list: List<TileEntry>, look: TileVision.Look): Hit? {
+        var best: TileEntry? = null
+        var bestSim = -1f
         for (e in list) {
-            if (!e.locked || e.value == null) continue
             val c = similarity(look.patches, e.feature)
-            if (c > best) {
-                best = c
-                bestValue = e.value
+            if (c >= threshold(e) && c > bestSim) {
+                bestSim = c
+                best = e
             }
         }
-        if (bestValue == null || best < MATCH) return null
+        val hit = best ?: return null
+        val level = hit.value
+        if (level == null) return Hit(null, false)
         for (e in list) {
-            if (!e.locked || e.value == null || e.value == bestValue) continue
-            if (similarity(look.patches, e.feature) >= best - MARGIN) return null
+            val v = e.value ?: continue
+            if (v == level) continue
+            if (similarity(look.patches, e.feature) >= bestSim - MARGIN) return null
         }
-        return bestValue
+        return Hit(level, hit.locked)
     }
+
+    /** How alike a tile's picture and a stored picture are (0.95 and up is nearly identical). */
+    fun similarityTo(look: TileVision.Look, feature: FloatArray): Float = similarity(look.patches, feature)
 
     /**
      * Remembers a tile the reader just looked at. A picture we already know is left alone
@@ -165,7 +178,7 @@ object TileLibrary {
             }
         }
         val known = bestEntry
-        if (known != null && best >= MATCH) {
+        if (known != null && best >= threshold(known)) {
             if (!known.locked) {
                 if (value != null && known.value != value) {
                     known.value = value

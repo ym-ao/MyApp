@@ -28,6 +28,7 @@ data class AppSettings(
     val pause: MsRange = MsRange(250L, 250L),          // pause after each move, also the delay per merge
     val swap: Boolean = true,
     val verify: Boolean = true,
+    val rereadMerge: Boolean = true,                   // read the board again after every merge (accurate, slower)
     val previewOnly: Boolean = false,
     val maxHold: MsRange = MsRange(30000L, 30000L),    // longest summon hold
     val loops: Int = 0,                                // 0 = keep going until stopped or nothing is left to do
@@ -61,6 +62,7 @@ object SettingsStore {
             pause = range(p, "pause", "pauseMs", 1L, d.pause),
             swap = p.getBoolean("swap", d.swap),
             verify = p.getBoolean("verify", d.verify),
+            rereadMerge = p.getBoolean("rereadMerge", d.rereadMerge),
             previewOnly = p.getBoolean("previewOnly", d.previewOnly),
             maxHold = range(p, "maxHold", "maxHoldSeconds", 1000L, d.maxHold),
             loops = p.getInt("loops", d.loops),
@@ -79,6 +81,7 @@ object SettingsStore {
             .putLong("pauseMin", s.pause.min).putLong("pauseMax", s.pause.max)
             .putBoolean("swap", s.swap)
             .putBoolean("verify", s.verify)
+            .putBoolean("rereadMerge", s.rereadMerge)
             .putBoolean("previewOnly", s.previewOnly)
             .putLong("maxHoldMin", s.maxHold.min).putLong("maxHoldMax", s.maxHold.max)
             .putInt("loops", s.loops)

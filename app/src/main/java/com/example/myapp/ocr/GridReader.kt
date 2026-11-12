@@ -47,6 +47,15 @@ object GridReader {
     // Below this brightness variation a cell counts as empty.
     private const val EMPTY_STD = 10.0
 
+    // Two new pictures this alike on one board are the same picture: read as text only once.
+    private const val GROUP_MATCH = 0.95f
+
+    /** One new picture being read as text, and everyone waiting for its result. */
+    private class Group(
+        val feature: FloatArray?,
+        val reports: MutableList<(Int?, ReadStatus, String) -> Unit>
+    )
+
     fun read(context: Context, profile: GridProfile, screenshot: Bitmap, onDone: (List<Reading>) -> Unit) {
         val boxes = profile.allBoxes()
         if (boxes.isEmpty()) {
@@ -59,6 +68,7 @@ object GridReader {
         val cell = estimateCell(boxes, profile.screenWidth * 0.04f) * (sx + sy) / 2f
 
         val library = TileLibrary.entries(context)
+        val groups = mutableListOf<Group>()
         val results = arrayOfNulls<Reading>(boxes.size)
         val tilesLeft = AtomicInteger(boxes.size)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -93,52 +103,87 @@ object GridReader {
                 return@forEachIndexed
             }
 
-            // A picture you have locked in the library needs no text reading.
+            // How this tile's reading is reported once it is known.
+            val report = { value: Int?, status: ReadStatus, raw: String ->
+                finishTile(index, reading(value, status, raw))
+            }
+
             if (look != null) {
-                val lockedValue = TileLibrary.lookupLocked(library, look)
-                if (lockedValue != null) {
-                    finishTile(index, reading(lockedValue, ReadStatus.READ, "library"))
+                // 1) A picture already in the library needs no text reading at all.
+                val hit = TileLibrary.lookup(library, look)
+                if (hit != null) {
+                    if (hit.value != null) {
+                        report(hit.value, ReadStatus.READ, if (hit.locked) "library" else "library (not confirmed)")
+                    } else {
+                        report(null, ReadStatus.UNREADABLE, "library: needs a level")
+                    }
+                    return@forEachIndexed
+                }
+                // 2) The same new picture seen elsewhere on this board is read as text only once.
+                val twin = groups.firstOrNull { g ->
+                    g.feature != null && TileLibrary.similarityTo(look, g.feature) >= GROUP_MATCH
+                }
+                if (twin != null) {
+                    twin.reports.add(report)
                     return@forEachIndexed
                 }
             }
 
             val variants = makeVariants(screenshot, cx, cy, cell, look)
             if (variants.isEmpty()) {
-                finishTile(index, reading(null, ReadStatus.UNREADABLE, "(outside screen)"))
+                report(null, ReadStatus.UNREADABLE, "(outside screen)")
                 return@forEachIndexed
             }
 
-            val texts = arrayOfNulls<String>(variants.size)
-            val variantsLeft = AtomicInteger(variants.size)
+            val group = Group(look?.patches?.get(0), mutableListOf(report))
+            if (group.feature != null) groups.add(group)
 
-            variants.forEachIndexed { vi, bitmap ->
-                recognizer.process(InputImage.fromBitmap(bitmap, 0))
+            val texts = arrayOfNulls<String>(variants.size)
+
+            // Combine the readings, remember the picture, and tell everyone waiting for it.
+            fun finishGroup() {
+                val votes = texts.mapNotNull { parse(it ?: "") }
+                val raw = texts.joinToString(" | ") { (it ?: "").replace("\n", " ").trim() }
+                var value: Int? = null
+                var status = ReadStatus.UNREADABLE
+                if (votes.isNotEmpty()) {
+                    val top = votes.groupingBy { it }.eachCount().maxByOrNull { it.value }!!
+                    value = top.key
+                    status = if (top.value >= 2) ReadStatus.READ else ReadStatus.LOW_CONFIDENCE
+                }
+                if (look != null) {
+                    when (status) {
+                        ReadStatus.READ -> TileLibrary.observe(context, look, value, null)
+                        ReadStatus.LOW_CONFIDENCE -> TileLibrary.observe(context, look, null, value)
+                        else -> TileLibrary.observe(context, look, null, null)
+                    }
+                }
+                for (r in group.reports) r(value, status, raw)
+            }
+
+            fun runVariant(vi: Int, onDone: () -> Unit) {
+                recognizer.process(InputImage.fromBitmap(variants[vi], 0))
                     .addOnCompleteListener { task ->
                         texts[vi] = if (task.isSuccessful) task.result?.text ?: "" else ""
-                        if (variantsLeft.decrementAndGet() == 0) {
-                            val votes = texts.mapNotNull { parse(it ?: "") }
-                            val raw = texts.joinToString(" | ") {
-                                (it ?: "").replace("\n", " ").trim()
-                            }
-                            if (votes.isEmpty()) {
-                                if (look != null) TileLibrary.observe(context, look, null, null)
-                                finishTile(index, reading(null, ReadStatus.UNREADABLE, raw))
-                            } else {
-                                val top = votes.groupingBy { it }.eachCount()
-                                    .maxByOrNull { it.value }!!
-                                val status =
-                                    if (top.value >= 2) ReadStatus.READ else ReadStatus.LOW_CONFIDENCE
-                                if (look != null) {
-                                    if (status == ReadStatus.READ) {
-                                        TileLibrary.observe(context, look, top.key, null)
-                                    } else {
-                                        TileLibrary.observe(context, look, null, top.key)
-                                    }
-                                }
-                                finishTile(index, reading(top.key, status, raw))
-                            }
+                        onDone()
+                    }
+            }
+
+            // Two readings first. Only when they don't agree is the third one needed.
+            val firstWave = min(2, variants.size)
+            val firstLeft = AtomicInteger(firstWave)
+            for (vi in 0 until firstWave) {
+                runVariant(vi) {
+                    if (firstLeft.decrementAndGet() == 0) {
+                        val a = parse(texts[0] ?: "")
+                        val b = if (firstWave > 1) parse(texts[1] ?: "") else null
+                        if (variants.size > 2 && !(a != null && a == b)) {
+                            runVariant(2) { finishGroup() }
+                        } else {
+                            finishGroup()
                         }
                     }
+                }
             }
         }
     }

@@ -50,6 +50,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.loopsInput.setText(s.loops.toString())
         binding.checkSwap.isChecked = s.swap
         binding.checkVerify.isChecked = s.verify
+        binding.checkReread.isChecked = s.rereadMerge
         binding.checkPreview.isChecked = s.previewOnly
 
         steps.clear()
@@ -163,6 +164,7 @@ class SettingsActivity : AppCompatActivity() {
             pause = readRange(binding.pauseMinInput, binding.pauseMaxInput, old.pause, 0L, 60000L),
             swap = binding.checkSwap.isChecked,
             verify = binding.checkVerify.isChecked,
+            rereadMerge = binding.checkReread.isChecked,
             previewOnly = binding.checkPreview.isChecked,
             maxHold = readRange(binding.holdMinInput, binding.holdMaxInput, old.maxHold, 500L, 600000L),
             loops = binding.loopsInput.text.toString().toIntOrNull()?.coerceIn(0, 100000) ?: old.loops,

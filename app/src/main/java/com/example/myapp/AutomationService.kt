@@ -312,6 +312,21 @@ class AutomationService : AccessibilityService() {
                     return@performMoves
                 }
                 merges++
+                if (!settings.rereadMerge) {
+                    // fast mode: trust the plan (the game's own upgrades are not modelled)
+                    BoardPlanner.applyMoves(board.ids, board.values, listOf(next.move))
+                    state.dest = next.newDest
+                    state.carrier = next.newCarrier
+                    if (settings.verify) {
+                        verifyEmpty(profile, next.move.from, 3) { good ->
+                            if (good) step(board)
+                            else onFinished(board, merges, "Merge $merges: box ${next.move.from} still has a tile, so the merge didn't happen")
+                        }
+                    } else {
+                        step(board)
+                    }
+                    return@performMoves
+                }
                 scanBoard(profile) { fresh, error ->
                     if (fresh == null) {
                         onFinished(null, merges, error ?: "Couldn't read the board")
