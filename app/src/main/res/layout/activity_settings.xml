@@ -265,7 +265,7 @@
             android:id="@+id/checkReread"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Merge chain: read the board again after every merge (copes with the game's upgrades). Unticked: much faster, but it only trusts its own plan." />
+            android:text="Merge chain: read the board again after every merge. Unticked (recommended): the whole chain is planned from one scan, like the sort, and nothing is read while tiles are moving." />
 
         <CheckBox
             android:id="@+id/checkVerify"

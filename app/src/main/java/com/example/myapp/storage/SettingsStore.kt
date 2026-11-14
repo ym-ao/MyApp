@@ -30,7 +30,7 @@ data class AppSettings(
     val verify: Boolean = true,
     val sortPasses: Int = 3,                           // sort passes per loop; the board is read again between passes
     val sortMovesPerPass: Int = 20,                    // most drags in one pass (0 = all of them)
-    val rereadMerge: Boolean = true,                   // read the board again after every merge (accurate, slower)
+    val rereadMerge: Boolean = false,                  // read the board again after every merge (slower; off = plan the whole chain from one scan)
     val previewOnly: Boolean = false,
     val maxHold: MsRange = MsRange(30000L, 30000L),    // longest summon hold
     val loops: Int = 0,                                // 0 = keep going until stopped or nothing is left to do
@@ -66,7 +66,7 @@ object SettingsStore {
             verify = p.getBoolean("verify", d.verify),
             sortPasses = p.getInt("sortPasses", d.sortPasses),
             sortMovesPerPass = p.getInt("sortMovesPerPass", d.sortMovesPerPass),
-            rereadMerge = p.getBoolean("rereadMerge", d.rereadMerge),
+            rereadMerge = p.getBoolean("mergeReread", d.rereadMerge),
             previewOnly = p.getBoolean("previewOnly", d.previewOnly),
             maxHold = range(p, "maxHold", "maxHoldSeconds", 1000L, d.maxHold),
             loops = p.getInt("loops", d.loops),
@@ -87,7 +87,7 @@ object SettingsStore {
             .putBoolean("verify", s.verify)
             .putInt("sortPasses", s.sortPasses)
             .putInt("sortMovesPerPass", s.sortMovesPerPass)
-            .putBoolean("rereadMerge", s.rereadMerge)
+            .putBoolean("mergeReread", s.rereadMerge)
             .putBoolean("previewOnly", s.previewOnly)
             .putLong("maxHoldMin", s.maxHold.min).putLong("maxHoldMax", s.maxHold.max)
             .putInt("loops", s.loops)

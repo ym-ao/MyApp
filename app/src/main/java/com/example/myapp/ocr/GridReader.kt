@@ -48,7 +48,7 @@ object GridReader {
     private const val EMPTY_STD = 10.0
 
     // Two new pictures this alike on one board are the same picture: read as text only once.
-    private const val GROUP_MATCH = 0.95f
+    private const val GROUP_MATCH = 0.93f
 
     /** One new picture being read as text, and everyone waiting for its result. */
     private class Group(

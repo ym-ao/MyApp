@@ -334,7 +334,7 @@ class AutomationService : AccessibilityService() {
         pass(1, first)
     }
 
-    private class MergeState(var dest: Int? = null, var carrier: Int? = null)
+    private class MergeState(var dest: Int? = null, var carrier: Int? = null, var level: Int? = null)
 
     /**
      * Runs a merge chain one merge at a time: plan ONE merge from the board as it is, drag, wait,
@@ -361,7 +361,7 @@ class AutomationService : AccessibilityService() {
                 onFinished(board, merges, null)
                 return
             }
-            val next = BoardPlanner.planNextMerge(board.ids, board.values, state.dest, state.carrier)
+            val next = BoardPlanner.planNextMerge(board.ids, board.values, state.dest, state.carrier, state.level)
             if (next == null) {
                 onFinished(board, merges, null)
                 return
@@ -378,6 +378,7 @@ class AutomationService : AccessibilityService() {
                     BoardPlanner.applyMoves(board.ids, board.values, listOf(next.move))
                     state.dest = next.newDest
                     state.carrier = next.newCarrier
+                    state.level = next.newLevel
                     if (settings.verify) {
                         verifyEmpty(profile, next.move.from, 3) { good ->
                             if (good) step(board)
@@ -400,6 +401,7 @@ class AutomationService : AccessibilityService() {
                     }
                     state.dest = next.newDest
                     state.carrier = next.newCarrier
+                    state.level = next.newLevel
                     step(fresh)
                 }
             }

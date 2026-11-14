@@ -19,7 +19,7 @@ enum class BoardAction { SORT, MERGE }
 class SortPlan(val moves: List<Move>, val leftover: Int)
 
 /** One planned merge, and the destination / carrier box to remember for the next one. */
-class NextMerge(val move: Move, val newDest: Int?, val newCarrier: Int?)
+class NextMerge(val move: Move, val newDest: Int?, val newCarrier: Int?, val newLevel: Int)
 
 /**
  * The board as the app currently believes it to be. It is built from one scan, then
@@ -273,40 +273,43 @@ object BoardPlanner {
      * ask again: the game upgrades other tiles when tiles merge, so a long plan made in advance
      * would go wrong. Unreadable tiles are never used.
      */
-    fun planNextMerge(ids: List<Int>, values: IntArray, dest: Int?, carrier: Int?): NextMerge? {
+    fun planNextMerge(ids: List<Int>, values: IntArray, dest: Int?, carrier: Int?, level: Int? = null): NextMerge? {
         val n = ids.size
         val index = HashMap<Int, Int>()
         ids.forEachIndexed { p, id -> index[id] = p }
 
+        // [level] is the level the destination (or carrier) must have after the last merge: two tiles
+        // of level L make exactly one of level L + 1. A freshly merged tile is a picture the reader
+        // may never have seen, so its level is carried along instead of being read from the screen.
         if (dest != null) {
             val d = index[dest] ?: return null
-            val level = values[d]
-            if (level <= 0) return null
-            val q = (n - 1 downTo 0).firstOrNull { it != d && values[it] == level } ?: return null
-            return NextMerge(Move(ids[q], ids[d], "merge two $level into a ${level + 1}", true), dest, null)
+            val lv = level ?: values[d]
+            if (lv <= 0) return null
+            val q = (n - 1 downTo 0).firstOrNull { it != d && values[it] == lv } ?: return null
+            return NextMerge(Move(ids[q], ids[d], "merge two $lv into a ${lv + 1}", true), dest, null, lv + 1)
         }
 
         if (carrier != null) {
             val c = index[carrier] ?: return null
-            val level = values[c]
-            if (level <= 0) return null
-            val t = (0 until n).firstOrNull { it != c && values[it] == level } ?: return null
+            val lv = level ?: values[c]
+            if (lv <= 0) return null
+            val t = (0 until n).firstOrNull { it != c && values[it] == lv } ?: return null
             return NextMerge(
-                Move(ids[c], ids[t], "merge two $level into a ${level + 1} (this box becomes the destination)", true),
-                ids[t], null
+                Move(ids[c], ids[t], "merge two $lv into a ${lv + 1} (this box becomes the destination)", true),
+                ids[t], null, lv + 1
             )
         }
 
         val order = (0 until n).filter { values[it] > 0 }
             .sortedWith(compareBy<Int>({ values[it] }, { -it }))
         for (s in order) {
-            val level = values[s]
-            val partner = (if (s > 0 && values[s - 1] == level) s - 1 else null)
-                ?: (n - 1 downTo 0).firstOrNull { it != s && values[it] == level }
+            val lv = values[s]
+            val partner = (if (s > 0 && values[s - 1] == lv) s - 1 else null)
+                ?: (n - 1 downTo 0).firstOrNull { it != s && values[it] == lv }
                 ?: continue
             return NextMerge(
-                Move(ids[s], ids[partner], "merge the lowest two $level into a ${level + 1} (not the destination)", true),
-                null, ids[partner]
+                Move(ids[s], ids[partner], "merge the lowest two $lv into a ${lv + 1} (not the destination)", true),
+                null, ids[partner], lv + 1
             )
         }
         return null

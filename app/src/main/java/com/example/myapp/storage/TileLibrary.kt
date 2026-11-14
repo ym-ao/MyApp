@@ -32,8 +32,9 @@ object TileLibrary {
 
     const val W = TileVision.TW
     const val H = TileVision.TH
-    const val MATCH_LOCKED = 0.91f   // a picture you confirmed: a clear match is enough
-    const val MATCH_OTHER = 0.95f    // a picture the reader remembered by itself: must be nearly identical
+    const val MATCH_LOCKED = 0.91f   // a picture you confirmed
+    const val MATCH_OTHER = 0.91f    // a picture the reader remembered by itself: the same threshold, so a picture that
+                                     // matches the library is never added to it a second time
     const val MARGIN = 0.03f
 
     private var cache: MutableList<TileEntry>? = null
@@ -132,8 +133,8 @@ object TileLibrary {
 
     /**
      * Looks a tile's picture up among ALL remembered pictures (so the same picture never needs
-     * text reading twice). Locked pictures match at [MATCH_LOCKED], the reader's own memories only
-     * when nearly identical ([MATCH_OTHER]). Returns null when nothing matches, or when two pictures
+     * text reading twice). Locked pictures match at [MATCH_LOCKED], the reader's own memories at [MATCH_OTHER]
+     * (the same). Returns null when nothing matches, or when two pictures
      * with different levels are almost equally close (then the text reader decides).
      */
     fun lookup(list: List<TileEntry>, look: TileVision.Look): Hit? {
