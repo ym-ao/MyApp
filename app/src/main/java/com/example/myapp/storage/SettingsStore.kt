@@ -51,10 +51,8 @@ data class AppSettings(
 
 object SettingsStore {
 
-    private const val PREFS = "myapp_settings"
-
-    fun load(context: Context): AppSettings {
-        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    fun load(context: Context, loadoutId: String = LoadoutStore.activeId(context)): AppSettings {
+        val p = context.getSharedPreferences(LoadoutStore.settingsPrefsName(loadoutId), Context.MODE_PRIVATE)
         val d = AppSettings()
         return AppSettings(
             grid = p.getString("grid", d.grid) ?: d.grid,
@@ -76,8 +74,8 @@ object SettingsStore {
         )
     }
 
-    fun save(context: Context, s: AppSettings) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+    fun save(context: Context, s: AppSettings, loadoutId: String = LoadoutStore.activeId(context)) {
+        context.getSharedPreferences(LoadoutStore.settingsPrefsName(loadoutId), Context.MODE_PRIVATE).edit()
             .putString("grid", s.grid)
             .putString("summonPoint", s.summonPoint)
             .putString("extraPoint", s.extraPoint)

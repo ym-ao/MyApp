@@ -305,12 +305,6 @@
             android:textSize="12sp"
             android:text="For long runs, set MyApp to Unrestricted battery use. The floating panel keeps the screen on while it is showing. Settings save automatically when you leave this screen." />
 
-        <Button
-            android:id="@+id/btnDone"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Done" />
 
     </LinearLayout>
 </ScrollView>

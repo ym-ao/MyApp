@@ -38,6 +38,7 @@ import com.example.myapp.storage.ActionStore
 import com.example.myapp.storage.ActionType
 import com.example.myapp.storage.AppSettings
 import com.example.myapp.storage.CustomAction
+import com.example.myapp.storage.LoadoutStore
 import com.example.myapp.storage.MsRange
 import com.example.myapp.storage.PlanStore
 import com.example.myapp.storage.SettingsStore
@@ -70,6 +71,7 @@ class AutomationService : AccessibilityService() {
     // The small Start / Stop bar shown over the game.
     private var panelView: View? = null
     private var panelStatusText: TextView? = null
+    private var panelLoadoutButton: TextView? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -1235,6 +1237,37 @@ class AutomationService : AccessibilityService() {
 
     fun isPanelShown(): Boolean = panelView != null
 
+    /** True while a job (loop, sort, merge, hold, custom actions) is running or counting down. */
+    fun isBusy(): Boolean = jobActive
+
+    private fun updatePanelLoadoutLabel() {
+        panelLoadoutButton?.text = "Loadout: ${LoadoutStore.activeName(this)}"
+    }
+
+    /** Called by the app after the active loadout changed, so the panel shows the right name. */
+    fun refreshPanelLoadout() {
+        mainHandler.post { updatePanelLoadoutLabel() }
+    }
+
+    /** Switches to the next loadout (from the floating panel). Markers belong to a loadout's own clicks, so they are hidden. */
+    private fun cycleLoadout() {
+        if (jobActive) {
+            toast("Stop the running job first, then switch loadout")
+            return
+        }
+        val all = LoadoutStore.list(this)
+        if (all.size < 2) {
+            toast("Only one loadout. Make more in the Run tab of the app.")
+            return
+        }
+        val i = all.indexOfFirst { it.id == LoadoutStore.activeId(this) }
+        val next = all[(i + 1) % all.size]
+        LoadoutStore.setActive(this, next.id)
+        hideMarkers()
+        updatePanelLoadoutLabel()
+        toast("Loadout: ${next.name}")
+    }
+
     /**
      * A small draggable bar: Start / Stop for the loop, + Click and + Drag to record custom
      * actions (like an auto clicker), Points to show or hide the draggable markers, and Hide.
@@ -1284,6 +1317,10 @@ class AutomationService : AccessibilityService() {
         val grey = Color.parseColor("#546E7A")
 
         root.addView(status)
+        val loadoutButton = button("", Color.parseColor("#00695C")) { cycleLoadout() }
+        panelLoadoutButton = loadoutButton
+        root.addView(loadoutButton, gap())
+        updatePanelLoadoutLabel()
         root.addView(row(button("Start", green) { onPanelStart() }, button("Stop", red) { onPanelStop() }), gap())
         root.addView(row(button("+ Click", blue) { addAction(ActionType.CLICK) }, button("+ Drag", blue) { addAction(ActionType.DRAG) }), gap())
         root.addView(row(button("Points", grey) { toggleMarkers() }, button("Hide", grey) { hidePanel() }), gap())
@@ -1341,6 +1378,7 @@ class AutomationService : AccessibilityService() {
         }
         panelView = null
         panelStatusText = null
+        panelLoadoutButton = null
     }
 
     private fun onPanelStart() {

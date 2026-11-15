@@ -34,10 +34,11 @@ class CustomActions(
 /** The user's recorded clicks and drags, kept in one small file. */
 object ActionStore {
 
-    private fun file(context: Context) = File(context.filesDir, "custom_actions.json")
+    private fun file(context: Context, loadoutId: String) =
+        File(context.filesDir, LoadoutStore.actionsFileName(loadoutId))
 
-    fun load(context: Context): CustomActions {
-        val f = file(context)
+    fun load(context: Context, loadoutId: String = LoadoutStore.activeId(context)): CustomActions {
+        val f = file(context, loadoutId)
         if (!f.exists()) return CustomActions(0, 0, 1, mutableListOf())
         return try {
             val o = JSONObject(f.readText())
@@ -61,7 +62,7 @@ object ActionStore {
         }
     }
 
-    fun save(context: Context, data: CustomActions) {
+    fun save(context: Context, data: CustomActions, loadoutId: String = LoadoutStore.activeId(context)) {
         val arr = JSONArray()
         for (a in data.actions) {
             val o = JSONObject()
@@ -75,6 +76,6 @@ object ActionStore {
         root.put("w", data.screenWidth).put("h", data.screenHeight)
         root.put("repeat", data.repeat)
         root.put("actions", arr)
-        file(context).writeText(root.toString())
+        file(context, loadoutId).writeText(root.toString())
     }
 }

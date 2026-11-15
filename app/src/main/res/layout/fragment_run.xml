@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:paddingBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnEnableService"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open Accessibility Settings" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="16dp"
+            android:text="Loadout"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/loadoutSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnLoadoutNew"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="New" />
+
+            <Button
+                android:id="@+id/btnLoadoutRename"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Rename" />
+
+            <Button
+                android:id="@+id/btnLoadoutDelete"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Delete" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:text="A loadout is a set of loop settings, step order and custom clicks. New makes a copy of the current one. Grids, click points and the Tile Library are shared by all loadouts. Your earlier setup is Loadout 1." />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="16dp"
+            android:text="Run"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnShowPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Show Floating Start / Stop Panel" />
+
+        <Button
+            android:id="@+id/btnStartLoop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Start Loop (after the countdown)" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:textSize="12sp"
+            android:text="The panel floats over the game: Start runs the loop, Stop ends it, and its Loadout button switches loadout. Drag the panel by its top label to somewhere that isn't on the grid. Volume Down also stops a running job." />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="16dp"
+            android:text="Test one piece at a time (a countdown first, then switch to the game)"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnMerge"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Merge Chain" />
+
+        <Button
+            android:id="@+id/btnSort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sort Board" />
+
+        <Button
+            android:id="@+id/btnHoldSummon"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold Summon Until Grid Full" />
+
+        <Button
+            android:id="@+id/btnTestTap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Test Tap on the Summon Point" />
+
+    </LinearLayout>
+</ScrollView>

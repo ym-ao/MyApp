@@ -1,3 +1,9 @@
 <resources>
-    <style name="Theme.MyApp" parent="Theme.MaterialComponents.DayNight.DarkActionBar" />
+    <style name="Theme.MyApp" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">#0F5C6E</item>
+        <item name="colorPrimaryVariant">#0A4452</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#26A69A</item>
+        <item name="colorOnSecondary">#000000</item>
+    </style>
 </resources>

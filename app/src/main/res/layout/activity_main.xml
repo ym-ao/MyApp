@@ -1,145 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        app:tabMode="scrollable" />
 
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="16sp"
-            android:paddingBottom="8dp" />
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/pager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
-        <Button
-            android:id="@+id/btnEnableService"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Open Accessibility Settings" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="16dp"
-            android:text="Set up"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnSetupGrid"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Set Up Grid" />
-
-        <Button
-            android:id="@+id/btnSetClickPoint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Set Click Point" />
-
-        <Button
-            android:id="@+id/btnActions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Custom Clicks &amp; Drags (auto-clicker style)" />
-
-        <Button
-            android:id="@+id/btnManage"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Saved Grids &amp; Click Points (use or delete)" />
-
-        <Button
-            android:id="@+id/btnLibrary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Tile Library (give pictures a level and lock them)" />
-
-        <Button
-            android:id="@+id/btnSettings"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Loop Settings &amp; Step Order" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="16dp"
-            android:text="Run"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnShowPanel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Show Floating Start / Stop Panel" />
-
-        <Button
-            android:id="@+id/btnStartLoop"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Start Loop (after the countdown)" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:textSize="12sp"
-            android:text="The panel floats over the game: tap Start to run the loop, Stop to end it. Drag the panel by its top label to somewhere that isn't on the grid. Volume Down also stops a running job." />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="16dp"
-            android:text="Test one piece at a time (a countdown first, set in Loop Settings, then switch to the game)"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnMerge"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Merge Chain" />
-
-        <Button
-            android:id="@+id/btnSort"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Sort Board" />
-
-        <Button
-            android:id="@+id/btnHoldSummon"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Hold Summon Until Grid Full" />
-
-        <Button
-            android:id="@+id/btnTestTap"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Test Tap on the Summon Point" />
-
-        <Button
-            android:id="@+id/btnReadGrid"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Read Grid Numbers" />
-
-        <Button
-            android:id="@+id/btnViewResult"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="View Last Result" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="12dp"
-            android:textSize="12sp"
-            android:text="Only tiles read confidently (green in View Last Result) are used for merging and sorting; unsure and unreadable tiles are left alone. Sort and Merge can be set to preview only in Loop Settings." />
-
-    </LinearLayout>
-</ScrollView>
+</LinearLayout>
