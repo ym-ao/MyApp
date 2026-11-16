@@ -121,3 +121,11 @@ Both read the board first, plan the drags, then perform them. Only tiles read co
 - **#4 - Sequencer:** chain #1/#3/#5 in a user-defined order
 - **#5 - Auto-merge:** find the lowest tile, merge it with a matching neighbour, wait an adjustable delay, repeat
 - Floating start/stop panel over the game, keep-alive/battery settings, in-app profile management
+
+## Updating the project on your phone
+
+Unzipping over the project adds and replaces files but never deletes files that were removed. When an update removes files (the tab update removed four old screens), clear the source folder first, then unzip, then ship:
+
+    cd ~/storage/downloads && rm -rf ~/MyApp/app/src && unzip -o MyApp.zip -d ~ && ~/ship.sh "what changed"
+
+Nothing you need lives in `app/src` (grids, click points, loadouts and the library are stored on the phone by the app), and git records the deletions.
