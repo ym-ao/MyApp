@@ -90,12 +90,19 @@ The app is now one screen with tabs:
 
 Every time in the app is in milliseconds (drag duration, pause after each move, longest summon hold, pause between loops, the countdown before a test button starts, and the times of each custom click or drag). Each one has a **from** and a **to** box: the same number in both is a fixed time; a range such as 500 and 1000 uses a new random time in that range every time it is needed. Settings saved by earlier versions are converted automatically (seconds became milliseconds).
 
-## Custom clicks & drags, auto-clicker style (built, needs on-device testing)
+## Click window, run window and the custom list (built, needs on-device testing)
 
-- The floating panel now has **+ Click**, **+ Drag**, **Points** (show or hide the markers), **Start**, **Stop** and **Hide**. Tap **+ Click** and a numbered marker appears; drag it onto the spot you want clicked. **+ Drag** gives two markers, a (start) and b (end). Positions are saved when you let go of a marker.
-- **Custom Clicks & Drags** (main screen) shows the list: change each action's press length or drag duration and its wait afterwards (each a from/to range in milliseconds), reorder, delete, set how many times the whole list repeats, and run it.
-- The list is also a loop step, **Custom clicks & drags**, in Loop Settings, so it can run before or after the merge, sort and summon steps. Untick the other steps and it works as a plain auto clicker.
-- Markers are hidden while anything runs, because a marker sitting on a spot would catch the touch instead of the game. Clicks and drags are only valid in the screen orientation they were recorded in.
+There are two floating windows, and each switches into the other:
+- **Run window**: Loadout (tap to switch to the next loadout), Start, Stop, **Clicks ▸** (opens the click window) and Hide.
+- **Click window** (auto-clicker style): a toolbar and a status bar. Toolbar: ▶ run the list, ● add a hold, ＋ add a tap, ↗ add a swipe, ƒ add a step (Sort, Merge, Summon, Wait), − remove the last step, ✓ save (everything is saved as you go), ⚙ open the app, ◉ show or hide the markers, ⇄ switch to the run window, ⟳ switch loadout, ✕ close. Tap the top arrow to collapse it. Status bar: ■ stop, ⏸ pause, loop and step counters, a timer, and the loadout name. Both windows can be dragged.
+- **Markers**: numbered circles on the real screen. Drag one onto a spot (a swipe has a and b). **Tap a marker** to open that step's settings (touch and hold time, delay after the step, repetitions, anti-detection offset, delete). Android may refuse to open the settings screen from a floating window; the app then says so, and the same settings are in the Clicks tab.
+- **Holds** can be any length (seconds, minutes, hours): the hold is chained from short pieces of one press.
+- The list (per loadout) can mix taps, swipes, holds, waits and the app's own **Sort, Merge and Summon** steps, in any order, each with its own repetitions and times (every time is a from/to range in milliseconds). It runs once or repeats as set in the Clicks tab, and it is also a step of the loop.
+- The toolbar and markers hide while something runs (they would block touches and show up in screenshots); the small status bar stays. Keep windows off the grid.
+
+## Loop behaviour
+
+A problem inside a loop (a missed drag, a board that hasn't settled after a lag spike, a failed screenshot) does not end the run: the next loop starts with a fresh read. The run ends when you stop it, when the loop count is reached, after the set number of problems in a row (Loadout tab, default 5), or, if you tick it, when nothing was left to do for two loops. The reason it ended stays on the Run tab as "Last run ended ...".
 
 ## Loop, step order, settings and floating panel (built, needs on-device testing)
 

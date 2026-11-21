@@ -33,6 +33,8 @@ data class AppSettings(
     val rereadMerge: Boolean = false,                  // read the board again after every merge (slower; off = plan the whole chain from one scan)
     val previewOnly: Boolean = false,
     val maxHold: MsRange = MsRange(30000L, 30000L),    // longest summon hold
+    val stopWhenIdle: Boolean = false,                 // stop by itself after two loops with nothing to do
+    val maxFailedLoops: Int = 5,                       // stop after this many loops in a row that hit a problem
     val loops: Int = 0,                                // 0 = keep going until stopped or nothing is left to do
     val loopPause: MsRange = MsRange(1500L, 1500L),    // pause between loops
     val countdown: MsRange = MsRange(5000L, 5000L),    // wait before a test button starts, to switch to the game
@@ -67,6 +69,8 @@ object SettingsStore {
             rereadMerge = p.getBoolean("mergeReread", d.rereadMerge),
             previewOnly = p.getBoolean("previewOnly", d.previewOnly),
             maxHold = range(p, "maxHold", "maxHoldSeconds", 1000L, d.maxHold),
+            stopWhenIdle = p.getBoolean("stopWhenIdle", d.stopWhenIdle),
+            maxFailedLoops = p.getInt("maxFailedLoops", d.maxFailedLoops),
             loops = p.getInt("loops", d.loops),
             loopPause = range(p, "loopPause", "loopPauseMs", 1L, d.loopPause),
             countdown = range(p, "countdown", null, 1L, d.countdown),
@@ -88,6 +92,8 @@ object SettingsStore {
             .putBoolean("mergeReread", s.rereadMerge)
             .putBoolean("previewOnly", s.previewOnly)
             .putLong("maxHoldMin", s.maxHold.min).putLong("maxHoldMax", s.maxHold.max)
+            .putBoolean("stopWhenIdle", s.stopWhenIdle)
+            .putInt("maxFailedLoops", s.maxFailedLoops)
             .putInt("loops", s.loops)
             .putLong("loopPauseMin", s.loopPause.min).putLong("loopPauseMax", s.loopPause.max)
             .putLong("countdownMin", s.countdown.min).putLong("countdownMax", s.countdown.max)

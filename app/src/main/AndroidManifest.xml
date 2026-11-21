@@ -32,6 +32,14 @@
             android:label="Set Up Grid" />
 
         <activity
+            android:name=".ActionSettingsActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:label="Step settings"
+            android:taskAffinity=""
+            android:theme="@style/Theme.MyApp.Dialog" />
+
+        <activity
             android:name=".ClickPointActivity"
             android:exported="false"
             android:label="Set Click Point" />

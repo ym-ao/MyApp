@@ -41,8 +41,11 @@ import com.example.myapp.storage.CustomAction
 import com.example.myapp.storage.LoadoutStore
 import com.example.myapp.storage.MsRange
 import com.example.myapp.storage.PlanStore
+import com.example.myapp.storage.RunLog
 import com.example.myapp.storage.SettingsStore
 import com.example.myapp.storage.StepType
+import kotlin.math.hypot
+import kotlin.random.Random
 
 /**
  * The part of the app that is allowed to look at the screen and perform
@@ -218,10 +221,22 @@ class AutomationService : AccessibilityService() {
     private fun gridMatchesScreen(profile: GridProfile, bitmap: Bitmap): Boolean =
         (profile.screenWidth > profile.screenHeight) == (bitmap.width > bitmap.height)
 
+    /** Marks a job as running. Floating windows that could block touches or end up in screenshots get out of the way. */
+    private fun beginJob() {
+        jobActive = true
+        stopRequested = false
+        hideMarkers()
+        setClickToolbarVisible(false)
+    }
+
     private fun endJob(message: String) {
         jobActive = false
         stopRequested = false
+        paused = false
+        timerRunning = false
         setPanelStatus("Ready")
+        setClickToolbarVisible(true)
+        RunLog.save(applicationContext, message)
         toast(message)
     }
 
@@ -568,8 +583,7 @@ class AutomationService : AccessibilityService() {
         val settings = SettingsStore.load(this)
         val profile = loadGrid(settings) ?: return
         val point = loadPoint(settings.summonPoint, "the summon button") ?: return
-        jobActive = true
-        stopRequested = false
+        beginJob()
         toast("Switch to the game now. Holding starts in $delayMs ms. Press Volume Down to stop.")
         mainHandler.postDelayed({
             startHold(profile, point, settings.maxHold.pick()) { _, message -> endJob(message) }
@@ -581,8 +595,7 @@ class AutomationService : AccessibilityService() {
         if (!preflight()) return
         val settings = SettingsStore.load(this)
         val profile = loadGrid(settings) ?: return
-        jobActive = true
-        stopRequested = false
+        beginJob()
         toast("Switch to the game now. Starting in $delayMs ms. Press Volume Down to stop.")
         mainHandler.postDelayed({
             if (stopRequested) {
@@ -789,8 +802,7 @@ class AutomationService : AccessibilityService() {
         }
         hideMarkers()   // the markers would block the touches
 
-        jobActive = true
-        stopRequested = false
+        beginJob()
         if (delayMs > 0) {
             toast("Switch to the game now. The loop starts in $delayMs ms. Press Volume Down to stop.")
         }
@@ -809,10 +821,31 @@ class AutomationService : AccessibilityService() {
         private var didWork = false
         private var idleLoops = 0
         private var summonTimeouts = 0
+        private var failedInRow = 0
 
         fun start() = nextLoop()
 
         private fun finish(message: String) = endJob(message)
+
+        /**
+         * A problem inside a loop (a missed drag, a board that hasn't settled after a lag spike, a failed
+         * screenshot) doesn't end the run: it starts the next loop, which begins with a fresh read of the
+         * board. Only a Stop, or too many problems in a row, ends it.
+         */
+        private fun soft(message: String) {
+            if (stopRequested) {
+                finish("Stopped during loop $loopNo")
+                return
+            }
+            failedInRow++
+            if (failedInRow >= settings.maxFailedLoops) {
+                finish("Stopped after $failedInRow problems in a row. Last one: $message")
+                return
+            }
+            toast("Loop $loopNo: $message. Trying the next loop ($failedInRow of ${settings.maxFailedLoops} problems in a row).")
+            setPanelStatus("${label()}: problem, retrying")
+            mainHandler.postDelayed({ nextLoop() }, settings.loopPause.pick())
+        }
 
         private fun label(): String =
             "Loop $loopNo" + (if (settings.loops > 0) " of ${settings.loops}" else "")
@@ -860,7 +893,7 @@ class AutomationService : AccessibilityService() {
             setPanelStatus("${label()}: reading board")
             scanBoard(profile) { scanned, error ->
                 if (scanned == null) {
-                    finish(error ?: "Couldn't read the board")
+                    soft(error ?: "Couldn't read the board")
                     return@scanBoard
                 }
                 board = scanned
@@ -883,7 +916,7 @@ class AutomationService : AccessibilityService() {
                     if (merges > 0) didWork = true
                     if (last != null) board = last   // freshly read, so the sort can start from it
                     if (error != null) {
-                        finish("Loop $loopNo: $error")
+                        soft(error)
                         return@mergeUntilDone
                     }
                     runStep(index + 1)
@@ -902,7 +935,7 @@ class AutomationService : AccessibilityService() {
                     if (total > 0) didWork = true
                     board = last   // null means: read the board again when the next step needs it
                     if (error != null) {
-                        finish("Loop $loopNo: $error")
+                        soft(error)
                         return@sortPasses
                     }
                     runStep(index + 1)
@@ -934,13 +967,18 @@ class AutomationService : AccessibilityService() {
                         return@startHold
                     }
                     HoldEnd.ERROR -> {
-                        finish("Loop $loopNo: $message")
+                        soft(message)
                         return@startHold
                     }
                 }
                 if (summonTimeouts >= 2) {
-                    finish("The grid never fills up (some squares may be blocked). Stopped.")
-                    return@startHold
+                    if (settings.stopWhenIdle) {
+                        finish("The grid never fills up (some squares may be blocked). Stopped.")
+                        return@startHold
+                    }
+                    if (summonTimeouts == 2) {
+                        toast("The grid isn't filling up (some squares may be blocked). Carrying on.")
+                    }
                 }
                 mainHandler.postDelayed({ runStep(index + 1) }, settings.pause.pick() + 500L)
             }
@@ -950,7 +988,7 @@ class AutomationService : AccessibilityService() {
             setPanelStatus("${label()}: custom actions")
             runCustom { ok, message ->
                 if (!ok) {
-                    finish("Loop $loopNo: $message")
+                    soft(message)
                     return@runCustom
                 }
                 didWork = true
@@ -968,18 +1006,18 @@ class AutomationService : AccessibilityService() {
             setPanelStatus("${label()}: extra click")
             captureScreen { bitmap, error ->
                 if (bitmap == null) {
-                    finish(error ?: "Screenshot failed")
+                    soft(error ?: "Screenshot failed")
                     return@captureScreen
                 }
                 if (!sameOrientation(point, bitmap)) {
-                    finish("Screen orientation doesn't match the extra click point. Rotate and try again.")
+                    soft("Screen orientation doesn't match the extra click point. Rotate and try again.")
                     return@captureScreen
                 }
                 val x = point.x * bitmap.width.toFloat() / point.screenWidth
                 val y = point.y * bitmap.height.toFloat() / point.screenHeight
                 tap(x, y, 80L) { ok ->
                     if (!ok) {
-                        finish("The extra click was blocked or cancelled")
+                        soft("The extra click was blocked or cancelled")
                         return@tap
                     }
                     didWork = true
@@ -990,8 +1028,9 @@ class AutomationService : AccessibilityService() {
         }
 
         private fun endOfLoop() {
+            failedInRow = 0
             if (didWork) idleLoops = 0 else idleLoops++
-            if (idleLoops >= 2) {
+            if (settings.stopWhenIdle && idleLoops >= 2) {
                 finish("Nothing left to do after $loopNo loop(s)")
                 return
             }
@@ -1000,7 +1039,7 @@ class AutomationService : AccessibilityService() {
         }
     }
 
-    // ---- custom clicks and drags (auto-clicker style) ----
+    // ---- the custom list: clicks, swipes, holds, waits and the app's own steps ----
 
     private fun screenSize(): Pair<Int, Int> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -1010,91 +1049,284 @@ class AutomationService : AccessibilityService() {
             Pair(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         }
 
-    /** Performs the recorded clicks and drags in order, repeated as set. Times are random within their ranges. */
+    @Volatile private var paused = false
+    private var runStartedAt = 0L
+    private var timerRunning = false
+    private var counters = "Ready"
+
+    private fun ActionType.usesScreen(): Boolean =
+        this == ActionType.CLICK || this == ActionType.DRAG || this == ActionType.HOLD
+
+    /** A position moved by a random amount (anti-detection); amount 0 leaves it alone. */
+    private fun fuzz(value: Float, amount: Int): Float =
+        if (amount <= 0) value else value + Random.nextInt(-amount, amount + 1)
+
+    /** Performs the whole custom list, repeated as set. Every time in it is a random pick inside its range. */
     private fun runCustom(onFinished: (Boolean, String) -> Unit) {
         val data = ActionStore.load(this)
         if (data.actions.isEmpty()) {
-            onFinished(false, "No custom clicks or drags yet. Add some with + Click and + Drag on the floating panel.")
+            onFinished(false, "The custom list is empty. Add steps with the click window or in the Clicks tab.")
             return
         }
         val (w, h) = screenSize()
-        if ((data.screenWidth > data.screenHeight) != (w > h)) {
+        if (data.actions.any { it.type.usesScreen() } && (data.screenWidth > data.screenHeight) != (w > h)) {
             onFinished(false, "The clicks and drags were recorded in the other screen orientation")
             return
         }
         hideMarkers()   // the markers would block the touches
-        val sx = w.toFloat() / data.screenWidth
-        val sy = h.toFloat() / data.screenHeight
+        setClickToolbarVisible(false)
+        val sx = if (data.screenWidth > 0) w.toFloat() / data.screenWidth else 1f
+        val sy = if (data.screenHeight > 0) h.toFloat() / data.screenHeight else 1f
         val count = data.actions.size
-        val total = count * data.repeat
+        val loops = data.repeat.coerceAtLeast(1)
+        runStartedAt = SystemClock.uptimeMillis()
+        timerRunning = true
+        paused = false
 
-        fun step(n: Int) {
+        fun finishRun(ok: Boolean, message: String) {
+            timerRunning = false
+            refreshStatusBar()
+            onFinished(ok, message)
+        }
+
+        fun act(loop: Int, i: Int) {
             if (stopRequested) {
-                onFinished(false, "Stopped after $n of $total actions")
+                finishRun(false, "Stopped")
                 return
             }
-            if (n >= total) {
-                onFinished(true, "")
+            if (paused) {
+                mainHandler.postDelayed({ act(loop, i) }, 200L)
                 return
             }
-            val a = data.actions[n % count]
-            val hold = MsRange(a.holdMin, a.holdMax).pick().coerceAtLeast(1L)
-            val wait = MsRange(a.waitMin, a.waitMax).pick()
-            setPanelStatus("action ${n % count + 1} of $count")
-            val done: (Boolean) -> Unit = { ok ->
-                if (!ok) onFinished(false, "Action ${n % count + 1} was blocked or cancelled")
-                else mainHandler.postDelayed({ step(n + 1) }, wait)
+            if (i >= count) {
+                if (loop + 1 >= loops) finishRun(true, "") else act(loop + 1, 0)
+                return
             }
-            if (a.type == ActionType.CLICK) {
-                tap(a.x1 * sx, a.y1 * sy, hold, done)
-            } else {
-                drag(a.x1 * sx, a.y1 * sy, a.x2 * sx, a.y2 * sy, hold, done)
+            val a = data.actions[i]
+            counters = "↻ ${loop + 1}/$loops   ▸ ${i + 1}/$count"
+            refreshStatusBar()
+            runOne(a, sx, sy) { ok, message ->
+                if (!ok) {
+                    finishRun(false, "Step ${i + 1}: $message")
+                } else {
+                    mainHandler.postDelayed({ act(loop, i + 1) }, MsRange(a.waitMin, a.waitMax).pick())
+                }
             }
         }
-        step(0)
+        act(0, 0)
     }
 
-    /** After a countdown, performs the recorded clicks and drags once (or as often as "repeat" says). */
-    fun runCustomAfterDelay(delayMs: Long) {
-        if (jobActive) {
-            toast("Already running. Press Volume Down, or Stop on the panel.")
+    /** One step of the list, done as many times in a row as its repetitions say. */
+    private fun runOne(a: CustomAction, sx: Float, sy: Float, onDone: (Boolean, String) -> Unit) {
+        val times = a.repeat.coerceAtLeast(1)
+
+        fun again(n: Int) {
+            if (stopRequested) {
+                onDone(false, "Stopped")
+                return
+            }
+            if (n >= times) {
+                onDone(true, "")
+                return
+            }
+            val hold = MsRange(a.holdMin, a.holdMax).pick().coerceAtLeast(1L)
+            val next: (Boolean, String) -> Unit = { ok, message ->
+                if (!ok) {
+                    onDone(false, message)
+                } else if (n + 1 < times) {
+                    mainHandler.postDelayed({ again(n + 1) }, MsRange(a.waitMin, a.waitMax).pick())
+                } else {
+                    onDone(true, "")
+                }
+            }
+            when (a.type) {
+                ActionType.CLICK -> tap(fuzz(a.x1 * sx, a.jitter), fuzz(a.y1 * sy, a.jitter), hold) { ok ->
+                    next(ok, "the tap was blocked or cancelled")
+                }
+                ActionType.DRAG -> drag(
+                    fuzz(a.x1 * sx, a.jitter), fuzz(a.y1 * sy, a.jitter),
+                    fuzz(a.x2 * sx, a.jitter), fuzz(a.y2 * sy, a.jitter), hold
+                ) { ok -> next(ok, "the swipe was blocked or cancelled") }
+                ActionType.HOLD -> holdFor(fuzz(a.x1 * sx, a.jitter), fuzz(a.y1 * sy, a.jitter), hold) { ok ->
+                    next(ok, "the hold was interrupted")
+                }
+                ActionType.WAIT -> mainHandler.postDelayed({ next(true, "") }, hold)
+                ActionType.SORT, ActionType.MERGE, ActionType.SUMMON -> runFeature(a.type) { ok, message ->
+                    next(ok, message)
+                }
+            }
+        }
+        again(0)
+    }
+
+    /**
+     * Presses and holds one spot for as long as asked (seconds, minutes, hours). Android limits one touch
+     * to about a minute, so the hold is built from back-to-back pieces of one press, as the summon hold is.
+     */
+    @SuppressLint("NewApi")
+    private fun holdFor(x: Float, y: Float, totalMs: Long, onDone: (Boolean) -> Unit) {
+        val started = SystemClock.uptimeMillis()
+        var last: GestureDescription.StrokeDescription? = null
+
+        fun release() {
+            val previous = last
+            if (previous == null) {
+                onDone(true)
+                return
+            }
+            val stroke = previous.continueStroke(Path().apply { moveTo(x, y) }, 0L, 30L, false)
+            val ok = dispatchGesture(
+                GestureDescription.Builder().addStroke(stroke).build(),
+                object : AccessibilityService.GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        onDone(true)
+                    }
+
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        onDone(true)
+                    }
+                },
+                null
+            )
+            if (!ok) onDone(true)
+        }
+
+        fun piece() {
+            if (stopRequested) {
+                release()
+                return
+            }
+            val remaining = totalMs - (SystemClock.uptimeMillis() - started)
+            val finalPiece = remaining <= HOLD_SEGMENT_MS
+            val length = (if (finalPiece) remaining else HOLD_SEGMENT_MS).coerceAtLeast(1L)
+            val path = Path().apply { moveTo(x, y) }
+            val previous = last
+            val stroke = if (previous == null) {
+                GestureDescription.StrokeDescription(path, 0L, length, !finalPiece)
+            } else {
+                previous.continueStroke(path, 0L, length, !finalPiece)
+            }
+            last = stroke
+            val ok = dispatchGesture(
+                GestureDescription.Builder().addStroke(stroke).build(),
+                object : AccessibilityService.GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        if (finalPiece) onDone(true) else piece()
+                    }
+
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        onDone(false)
+                    }
+                },
+                null
+            )
+            if (!ok) onDone(false)
+        }
+        piece()
+    }
+
+    /** The app's own steps (sort, merge, summon) used as steps of the custom list. */
+    private fun runFeature(type: ActionType, onDone: (Boolean, String) -> Unit) {
+        val settings = SettingsStore.load(this)
+        val profile = loadGrid(settings)
+        if (profile == null) {
+            onDone(false, "no grid is chosen in the Loadout tab")
             return
         }
-        jobActive = true
-        stopRequested = false
-        toast("Switch to the game now. Starting in $delayMs ms. Press Volume Down to stop.")
+        when (type) {
+            ActionType.SORT -> scanBoard(profile) { board, error ->
+                if (board == null) onDone(false, error ?: "couldn't read the board")
+                else sortPasses(profile, board, settings) { _, _, err -> onDone(err == null, err ?: "") }
+            }
+            ActionType.MERGE -> scanBoard(profile) { board, error ->
+                if (board == null) onDone(false, error ?: "couldn't read the board")
+                else mergeUntilDone(profile, board, settings) { _, _, err -> onDone(err == null, err ?: "") }
+            }
+            ActionType.SUMMON -> {
+                val point = loadPoint(settings.summonPoint, "the summon step")
+                if (point == null) {
+                    onDone(false, "no summon click point is chosen")
+                    return
+                }
+                startHold(profile, point, settings.maxHold.pick()) { end, message ->
+                    onDone(end != HoldEnd.ERROR && end != HoldEnd.STOPPED, message)
+                }
+            }
+            else -> onDone(true, "")
+        }
+    }
+
+    /** After a countdown, performs the custom list (all its repeats). */
+    fun runCustomAfterDelay(delayMs: Long) {
+        if (jobActive) {
+            toast("Already running. Press Volume Down, or Stop on the window.")
+            return
+        }
+        beginJob()
+        if (delayMs > 0) toast("Switch to the game now. Starting in $delayMs ms. Press Volume Down to stop.")
         mainHandler.postDelayed({
-            runCustom { ok, message -> endJob(if (ok) "Custom clicks and drags finished" else message) }
+            runCustom { ok, message -> endJob(if (ok) "The custom list finished" else message) }
         }, delayMs)
     }
+
+    private fun startCustomFromWindow() {
+        if (jobActive) toast("Already running. Tap ■ to stop.") else runCustomAfterDelay(0L)
+    }
+
+    private fun togglePause() {
+        if (!jobActive) {
+            toast("Nothing is running")
+            return
+        }
+        paused = !paused
+        clickPauseButton?.text = if (paused) "▶" else "⏸"
+        toast(if (paused) "Paused" else "Continuing")
+    }
+
+    // ---- markers: draggable points on the real screen for clicks, swipes and holds ----
 
     private class Marker(val view: TextView, val params: WindowManager.LayoutParams)
 
     private val markers = mutableListOf<Marker>()
 
-    /** Used by the Custom Clicks & Drags screen after the list was cleared. */
+    /** Used by the app screens after the list was changed or cleared. */
     fun hidePanelMarkers() = hideMarkers()
+
+    /** Draws the markers again (only if they are showing) after the list changed. */
+    fun refreshMarkers() {
+        mainHandler.post { if (markers.isNotEmpty()) showMarkers() }
+    }
 
     private fun toggleMarkers() {
         if (markers.isEmpty()) showMarkers() else hideMarkers()
     }
 
-    /** One draggable marker per click, two (a and b) per drag, so positions can be set on the real screen. */
     private fun showMarkers() {
         hideMarkers()
         val data = ActionStore.load(this)
-        if (data.actions.isEmpty()) {
-            toast("No clicks or drags yet. Tap + Click or + Drag.")
-            return
-        }
+        val blue = Color.argb(170, 33, 150, 243)
+        val orange = Color.argb(170, 255, 152, 0)
+        val teal = Color.argb(170, 0, 150, 136)
+        var any = false
         data.actions.forEachIndexed { i, a ->
-            if (a.type == ActionType.CLICK) {
-                addMarker("${i + 1}", a.x1, a.y1, i, false)
-            } else {
-                addMarker("${i + 1}a", a.x1, a.y1, i, false)
-                addMarker("${i + 1}b", a.x2, a.y2, i, true)
+            when (a.type) {
+                ActionType.CLICK -> {
+                    addMarker("${i + 1}", a.x1, a.y1, i, false, blue)
+                    any = true
+                }
+                ActionType.HOLD -> {
+                    addMarker("${i + 1}", a.x1, a.y1, i, false, orange)
+                    any = true
+                }
+                ActionType.DRAG -> {
+                    addMarker("${i + 1}a", a.x1, a.y1, i, false, teal)
+                    addMarker("${i + 1}b", a.x2, a.y2, i, true, teal)
+                    any = true
+                }
+                else -> {}
             }
         }
+        if (!any) toast("No taps, swipes or holds yet. Add some with the click window.")
     }
 
     private fun hideMarkers() {
@@ -1108,10 +1340,13 @@ class AutomationService : AccessibilityService() {
         markers.clear()
     }
 
+    /** A marker: drag it to move the point; tap it to open that step's settings. */
     @SuppressLint("ClickableViewAccessibility")
-    private fun addMarker(label: String, cx: Int, cy: Int, actionIndex: Int, isEnd: Boolean) {
+    private fun addMarker(label: String, cx: Int, cy: Int, actionIndex: Int, isEnd: Boolean, color: Int) {
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        val size = (46 * resources.displayMetrics.density).toInt()
+        val density = resources.displayMetrics.density
+        val size = (46 * density).toInt()
+        val slop = 10 * density
         val view = TextView(this).apply {
             text = label
             gravity = Gravity.CENTER
@@ -1119,7 +1354,7 @@ class AutomationService : AccessibilityService() {
             textSize = 13f
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.argb(170, 33, 150, 243))
+                setColor(color)
                 setStroke(3, Color.WHITE)
             }
         }
@@ -1141,6 +1376,7 @@ class AutomationService : AccessibilityService() {
         var startY = 0
         var touchX = 0f
         var touchY = 0f
+        var moved = false
         view.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -1148,13 +1384,21 @@ class AutomationService : AccessibilityService() {
                     startY = params.y
                     touchX = event.rawX
                     touchY = event.rawY
+                    moved = false
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    params.x = startX + (event.rawX - touchX).toInt()
-                    params.y = startY + (event.rawY - touchY).toInt()
-                    wm.updateViewLayout(v, params)
+                    val dx = event.rawX - touchX
+                    val dy = event.rawY - touchY
+                    if (hypot(dx, dy) > slop) moved = true
+                    if (moved) {
+                        params.x = startX + dx.toInt()
+                        params.y = startY + dy.toInt()
+                        wm.updateViewLayout(v, params)
+                    }
                 }
-                MotionEvent.ACTION_UP -> saveMarkerPosition(v, actionIndex, isEnd)
+                MotionEvent.ACTION_UP -> {
+                    if (moved) saveMarkerPosition(v, actionIndex, isEnd) else openActionSettings(actionIndex)
+                }
             }
             true
         }
@@ -1198,7 +1442,7 @@ class AutomationService : AccessibilityService() {
         } else {
             a.x1 = cx
             a.y1 = cy
-            if (a.type == ActionType.CLICK) {
+            if (a.type != ActionType.DRAG) {
                 a.x2 = cx
                 a.y2 = cy
             }
@@ -1206,50 +1450,100 @@ class AutomationService : AccessibilityService() {
         ActionStore.save(this, data)
     }
 
+    /** Opens the settings screen for one step (like the Tap Settings dialog of an auto clicker). */
+    private fun openActionSettings(index: Int) {
+        ActionSettingsActivity.opened = false
+        val intent = Intent(this, ActionSettingsActivity::class.java)
+            .putExtra(ActionSettingsActivity.EXTRA_INDEX, index)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            toast("Couldn't open the settings: ${e.message}")
+            return
+        }
+        mainHandler.postDelayed({
+            if (!ActionSettingsActivity.opened) {
+                toast("Android didn't open the settings from here. Open the app, Clicks tab, and tap step ${index + 1}.")
+            }
+        }, 1500L)
+    }
+
+    private fun openApp() {
+        try {
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            toast("Couldn't open the app: ${e.message}")
+        }
+    }
+
+    /** Adds a step to the end of the active loadout's custom list. */
     private fun addAction(type: ActionType) {
         val (w, h) = screenSize()
         val data = ActionStore.load(this)
-        if (data.actions.isEmpty()) {
-            data.screenWidth = w
-            data.screenHeight = h
-        } else if ((data.screenWidth > data.screenHeight) != (w > h)) {
-            toast("The saved clicks and drags were recorded in the other orientation. Rotate back, or clear them in Custom Clicks & Drags.")
-            return
+        if (type.usesScreen()) {
+            if (data.screenWidth == 0 || data.actions.none { it.type.usesScreen() }) {
+                data.screenWidth = w
+                data.screenHeight = h
+            } else if ((data.screenWidth > data.screenHeight) != (w > h)) {
+                toast("The saved clicks and drags were recorded in the other orientation. Rotate back, or clear them in the Clicks tab.")
+                return
+            }
         }
         val n = data.actions.size
         val cx = w / 2 + (n % 6) * 70
         val cy = h / 2 + (n % 6) * 35
-        val action = if (type == ActionType.CLICK) {
-            CustomAction(ActionType.CLICK, cx, cy, cx, cy, 50L, 50L, 500L, 500L)
-        } else {
-            CustomAction(ActionType.DRAG, cx - 150, cy, cx + 150, cy, 300L, 300L, 500L, 500L)
+        val action = when (type) {
+            ActionType.CLICK -> CustomAction(type, cx, cy, cx, cy, 50L, 50L, 500L, 500L)
+            ActionType.HOLD -> CustomAction(type, cx, cy, cx, cy, 1000L, 1000L, 500L, 500L)
+            ActionType.DRAG -> CustomAction(type, cx - 150, cy, cx + 150, cy, 300L, 300L, 500L, 500L)
+            ActionType.WAIT -> CustomAction(type, 0, 0, 0, 0, 1000L, 1000L, 0L, 0L)
+            else -> CustomAction(type, 0, 0, 0, 0, 0L, 0L, 500L, 500L)
         }
         data.actions.add(action)
         ActionStore.save(this, data)
-        showMarkers()
+        if (type.usesScreen()) showMarkers()
         toast(
-            if (type == ActionType.CLICK) "Click ${n + 1} added: drag its marker onto the spot"
-            else "Drag ${n + 1} added: put marker a at the start and b at the end"
+            when (type) {
+                ActionType.CLICK -> "Tap ${n + 1} added: drag its marker onto the spot, tap it for settings"
+                ActionType.HOLD -> "Hold ${n + 1} added (1000 ms): drag its marker onto the spot, tap it to set the time"
+                ActionType.DRAG -> "Swipe ${n + 1} added: put marker a at the start and b at the end"
+                ActionType.WAIT -> "Wait added as step ${n + 1} (1000 ms): change it in the Clicks tab"
+                ActionType.SORT -> "Sort added as step ${n + 1}"
+                ActionType.MERGE -> "Merge added as step ${n + 1}"
+                ActionType.SUMMON -> "Summon added as step ${n + 1}"
+            }
         )
     }
 
-    // ---- floating panel (shown over the game) ----
+    private fun removeLastAction() {
+        val data = ActionStore.load(this)
+        if (data.actions.isEmpty()) {
+            toast("The list is empty")
+            return
+        }
+        data.actions.removeAt(data.actions.size - 1)
+        ActionStore.save(this, data)
+        if (markers.isNotEmpty()) showMarkers()
+        toast("Removed the last step (${data.actions.size} left)")
+    }
 
-    fun isPanelShown(): Boolean = panelView != null
+    // ---- loadout switching (works from both windows) ----
 
-    /** True while a job (loop, sort, merge, hold, custom actions) is running or counting down. */
+    private fun updateLoadoutLabels() {
+        val name = LoadoutStore.activeName(this)
+        panelLoadoutButton?.text = "Loadout: $name"
+        clickLoadoutLabel?.text = name
+    }
+
+    /** Called by the app after the active loadout changed, so the windows show the right name. */
+    fun refreshPanelLoadout() {
+        mainHandler.post { updateLoadoutLabels() }
+    }
+
     fun isBusy(): Boolean = jobActive
 
-    private fun updatePanelLoadoutLabel() {
-        panelLoadoutButton?.text = "Loadout: ${LoadoutStore.activeName(this)}"
-    }
-
-    /** Called by the app after the active loadout changed, so the panel shows the right name. */
-    fun refreshPanelLoadout() {
-        mainHandler.post { updatePanelLoadoutLabel() }
-    }
-
-    /** Switches to the next loadout (from the floating panel). Markers belong to a loadout's own clicks, so they are hidden. */
+    /** Switches to the next loadout. Markers belong to a loadout's own list, so they are hidden. */
     private fun cycleLoadout() {
         if (jobActive) {
             toast("Stop the running job first, then switch loadout")
@@ -1264,20 +1558,278 @@ class AutomationService : AccessibilityService() {
         val next = all[(i + 1) % all.size]
         LoadoutStore.setActive(this, next.id)
         hideMarkers()
-        updatePanelLoadoutLabel()
+        updateLoadoutLabels()
         toast("Loadout: ${next.name}")
     }
 
+    // ---- window helpers ----
+
+    private fun overlayParams(): WindowManager.LayoutParams = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+        PixelFormat.TRANSLUCENT
+    ).apply { gravity = Gravity.TOP or Gravity.START }
+
+    /** Lets a window be moved by dragging [handle]; a plain tap on it calls [onTap]. */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun makeDraggable(handle: View, window: View, params: WindowManager.LayoutParams, onTap: (() -> Unit)? = null) {
+        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        val slop = 10 * resources.displayMetrics.density
+        var startX = 0
+        var startY = 0
+        var touchX = 0f
+        var touchY = 0f
+        var moved = false
+        handle.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startX = params.x
+                    startY = params.y
+                    touchX = event.rawX
+                    touchY = event.rawY
+                    moved = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - touchX
+                    val dy = event.rawY - touchY
+                    if (hypot(dx, dy) > slop) moved = true
+                    if (moved) {
+                        params.x = startX + dx.toInt()
+                        params.y = startY + dy.toInt()
+                        try {
+                            wm.updateViewLayout(window, params)
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP -> if (!moved) onTap?.invoke()
+            }
+            true
+        }
+    }
+
+    // ---- the click window: toolbar + status bar (auto-clicker style) ----
+
+    private var clickToolbarView: View? = null
+    private var clickButtonsBox: View? = null
+    private var clickFeatureMenu: View? = null
+    private var clickStatusView: View? = null
+    private var clickStatusText: TextView? = null
+    private var clickPauseButton: TextView? = null
+    private var clickLoadoutLabel: TextView? = null
+
+    fun isClickWindowShown(): Boolean = clickToolbarView != null
+
+    private fun setClickToolbarVisible(visible: Boolean) {
+        mainHandler.post { clickToolbarView?.visibility = if (visible) View.VISIBLE else View.GONE }
+    }
+
+    private fun refreshStatusBar() {
+        val text = clickStatusText ?: return
+        val seconds = if (timerRunning) (SystemClock.uptimeMillis() - runStartedAt) / 1000 else 0L
+        val clock = "%02d:%02d:%02d".format(seconds / 3600, (seconds / 60) % 60, seconds % 60)
+        text.text = "$counters   $clock"
+    }
+
+    private val statusTicker = object : Runnable {
+        override fun run() {
+            refreshStatusBar()
+            if (clickStatusView != null) mainHandler.postDelayed(this, 500L)
+        }
+    }
+
+    private fun switchToClickWindow() {
+        hidePanel()
+        showClickWindow()
+    }
+
+    private fun switchToRunWindow() {
+        hideClickWindow()
+        showPanel()
+    }
+
     /**
-     * A small draggable bar: Start / Stop for the loop, + Click and + Drag to record custom
-     * actions (like an auto clicker), Points to show or hide the draggable markers, and Hide.
-     * It uses an accessibility overlay, so no "display over other apps" permission is needed.
-     * It keeps the screen on while it is showing. Drag it (by its top label) off the grid, e.g.
-     * into the black side bar, so it doesn't end up in the screenshots.
+     * The click window: a compact toolbar (play, hold, tap, swipe, steps, remove, save, open app,
+     * show/hide points, switch to the run window, loadout, close) and a status bar (stop, pause,
+     * loop and step counters, timer). Tap a marker for the step's settings. Both parts are accessibility
+     * overlays, so no "display over other apps" permission is needed. The toolbar hides while something runs.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    fun showClickWindow() {
+        if (clickToolbarView != null) return
+        hidePanel()
+        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        val density = resources.displayMetrics.density
+        fun px(dp: Int) = (dp * density).toInt()
+
+        val teal = Color.parseColor("#0F5C6E")
+        val light = Color.argb(240, 245, 247, 248)
+        fun rounded(color: Int, radiusDp: Int) = GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = px(radiusDp).toFloat()
+        }
+        fun tool(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
+            text = label
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(teal)
+            setOnClickListener { onClick() }
+        }
+        val cell = { LinearLayout.LayoutParams(px(44), px(44)) }
+        fun row(a: TextView, b: TextView): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(a, cell())
+            addView(b, cell())
+        }
+
+        // ----- toolbar -----
+        val featureMenu = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        fun featureItem(label: String, type: ActionType) {
+            featureMenu.addView(
+                tool(label) {
+                    addAction(type)
+                    featureMenu.visibility = View.GONE
+                }.apply { textSize = 14f },
+                LinearLayout.LayoutParams(px(88), px(38))
+            )
+        }
+        featureItem("Sort", ActionType.SORT)
+        featureItem("Merge", ActionType.MERGE)
+        featureItem("Summon", ActionType.SUMMON)
+        featureItem("Wait", ActionType.WAIT)
+
+        val buttons = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        buttons.addView(row(tool("▶") { startCustomFromWindow() }, tool("●") { addAction(ActionType.HOLD) }))
+        buttons.addView(row(tool("＋") { addAction(ActionType.CLICK) }, tool("↗") { addAction(ActionType.DRAG) }))
+        buttons.addView(row(
+            tool("ƒ") { featureMenu.visibility = if (featureMenu.visibility == View.VISIBLE) View.GONE else View.VISIBLE },
+            tool("−") { removeLastAction() }
+        ))
+        buttons.addView(row(
+            tool("✓") { toast("Saved in ${LoadoutStore.activeName(this)}. Everything is saved as you go.") },
+            tool("⚙") { openApp() }
+        ))
+        buttons.addView(row(tool("◉") { toggleMarkers() }, tool("⇄") { switchToRunWindow() }))
+        buttons.addView(row(tool("⟳") { cycleLoadout() }, tool("✕") { hideClickWindow() }))
+        buttons.addView(featureMenu)
+
+        val handle = tool("▾") { }.apply { textSize = 16f }
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(light, 12)
+            setPadding(px(4), px(2), px(4), px(4))
+            addView(handle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, px(28)))
+            addView(buttons)
+        }
+        val toolbarParams = overlayParams().apply {
+            x = px(8)
+            y = px(70)
+        }
+        makeDraggable(handle, toolbar, toolbarParams) {
+            buttons.visibility = if (buttons.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            handle.text = if (buttons.visibility == View.VISIBLE) "▾" else "▴"
+        }
+
+        // ----- status bar -----
+        val stop = tool("■") { onPanelStop() }.apply { setTextColor(Color.parseColor("#C62828")) }
+        val pause = tool("⏸") { togglePause() }
+        val statusText = TextView(this).apply {
+            text = "Ready"
+            textSize = 14f
+            setTextColor(Color.BLACK)
+            setPadding(px(8), 0, px(8), 0)
+        }
+        val loadoutLabel = TextView(this).apply {
+            textSize = 11f
+            setTextColor(teal)
+            setPadding(px(8), 0, px(8), 0)
+        }
+        val textColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(statusText)
+            addView(loadoutLabel)
+        }
+        val statusBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(light, 12)
+            setPadding(px(4), px(2), px(8), px(2))
+            addView(stop, LinearLayout.LayoutParams(px(40), px(40)))
+            addView(pause, LinearLayout.LayoutParams(px(40), px(40)))
+            addView(textColumn)
+        }
+        val statusParams = overlayParams().apply {
+            x = px(60)
+            y = px(8)
+        }
+        makeDraggable(textColumn, statusBar, statusParams)
+
+        try {
+            wm.addView(toolbar, toolbarParams)
+            wm.addView(statusBar, statusParams)
+        } catch (e: Exception) {
+            toast("Couldn't show the click window: ${e.message}")
+            try {
+                wm.removeView(toolbar)
+            } catch (_: Exception) {
+            }
+            return
+        }
+        clickToolbarView = toolbar
+        clickButtonsBox = buttons
+        clickFeatureMenu = featureMenu
+        clickStatusView = statusBar
+        clickStatusText = statusText
+        clickPauseButton = pause
+        clickLoadoutLabel = loadoutLabel
+        counters = "Ready"
+        updateLoadoutLabels()
+        refreshStatusBar()
+        mainHandler.removeCallbacks(statusTicker)
+        mainHandler.postDelayed(statusTicker, 500L)
+    }
+
+    fun hideClickWindow() {
+        hideMarkers()
+        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        for (v in listOf(clickToolbarView, clickStatusView)) {
+            if (v == null) continue
+            try {
+                wm.removeView(v)
+            } catch (_: Exception) {
+            }
+        }
+        clickToolbarView = null
+        clickButtonsBox = null
+        clickFeatureMenu = null
+        clickStatusView = null
+        clickStatusText = null
+        clickPauseButton = null
+        clickLoadoutLabel = null
+        mainHandler.removeCallbacks(statusTicker)
+    }
+
+    // ---- the run window (the original floating panel) ----
+
+    fun isPanelShown(): Boolean = panelView != null
+
+    /**
+     * The run window: a small draggable bar with the loadout, Start / Stop for the loop, a button that
+     * switches to the click window, and Hide. It uses an accessibility overlay, so no "display over
+     * other apps" permission is needed, and it keeps the screen on while showing. Drag it by its top
+     * label off the grid (for example into the black side bar) so it doesn't end up in the screenshots.
      */
     @SuppressLint("ClickableViewAccessibility")
     fun showPanel() {
         if (panelView != null) return
+        hideClickWindow()
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val density = resources.displayMetrics.density
         fun px(dp: Int) = (dp * density).toInt()
@@ -1320,52 +1872,23 @@ class AutomationService : AccessibilityService() {
         val loadoutButton = button("", Color.parseColor("#00695C")) { cycleLoadout() }
         panelLoadoutButton = loadoutButton
         root.addView(loadoutButton, gap())
-        updatePanelLoadoutLabel()
         root.addView(row(button("Start", green) { onPanelStart() }, button("Stop", red) { onPanelStop() }), gap())
-        root.addView(row(button("+ Click", blue) { addAction(ActionType.CLICK) }, button("+ Drag", blue) { addAction(ActionType.DRAG) }), gap())
-        root.addView(row(button("Points", grey) { toggleMarkers() }, button("Hide", grey) { hidePanel() }), gap())
+        root.addView(row(button("Clicks ▸", blue) { switchToClickWindow() }, button("Hide", grey) { hidePanel() }), gap())
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
+        val params = overlayParams().apply {
             x = 0
             y = px(60)
         }
-
-        var startX = 0
-        var startY = 0
-        var touchX = 0f
-        var touchY = 0f
-        status.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    startX = params.x
-                    startY = params.y
-                    touchX = event.rawX
-                    touchY = event.rawY
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    params.x = startX + (event.rawX - touchX).toInt()
-                    params.y = startY + (event.rawY - touchY).toInt()
-                    wm.updateViewLayout(root, params)
-                }
-            }
-            true
-        }
+        makeDraggable(status, root, params)
 
         try {
             wm.addView(root, params)
             panelView = root
             panelStatusText = status
+            updateLoadoutLabels()
         } catch (e: Exception) {
-            toast("Couldn't show the panel: ${e.message}")
+            panelLoadoutButton = null
+            toast("Couldn't show the run window: ${e.message}")
         }
     }
 
@@ -1400,7 +1923,13 @@ class AutomationService : AccessibilityService() {
     }
 
     private fun setPanelStatus(text: String) {
-        mainHandler.post { panelStatusText?.text = "MyApp: $text" }
+        mainHandler.post {
+            panelStatusText?.text = "MyApp: $text"
+            if (clickStatusText != null && !timerRunning) {
+                counters = text
+                refreshStatusBar()
+            }
+        }
     }
 
     private fun toast(message: String) {

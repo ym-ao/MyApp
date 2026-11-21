@@ -16,6 +16,13 @@
             android:textSize="16sp"
             android:paddingBottom="8dp" />
 
+        <TextView
+            android:id="@+id/lastRunText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="8dp"
+            android:textSize="13sp" />
+
         <Button
             android:id="@+id/btnEnableService"
             android:layout_width="match_parent"
@@ -82,6 +89,12 @@
             android:text="Show Floating Start / Stop Panel" />
 
         <Button
+            android:id="@+id/btnShowClickWindow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Show Click Window (add clicks, swipes, holds and steps)" />
+
+        <Button
             android:id="@+id/btnStartLoop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -92,7 +105,7 @@
             android:layout_height="wrap_content"
             android:paddingTop="4dp"
             android:textSize="12sp"
-            android:text="The panel floats over the game: Start runs the loop, Stop ends it, and its Loadout button switches loadout. Drag the panel by its top label to somewhere that isn't on the grid. Volume Down also stops a running job." />
+            android:text="The run window floats over the game: Start runs the loop, Stop ends it, its Loadout button switches loadout, and Clicks opens the click window (the two windows switch into each other). Drag the panel by its top label to somewhere that isn't on the grid. Volume Down also stops a running job." />
 
         <TextView
             android:layout_width="match_parent"

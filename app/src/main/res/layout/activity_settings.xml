@@ -230,6 +230,24 @@
             android:layout_height="wrap_content"
             android:inputType="number" />
 
+        <CheckBox
+            android:id="@+id/checkIdleStop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Stop by itself when nothing was left to do for two loops in a row (off: keep looping until you stop it)" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Stop after this many loops in a row that hit a problem (a problem otherwise just starts the next loop)"
+            android:textSize="12sp" />
+
+        <EditText
+            android:id="@+id/failedLoopsInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="number" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

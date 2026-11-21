@@ -1,12 +1,11 @@
 package com.example.myapp
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.text.InputType
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -19,7 +18,10 @@ import com.example.myapp.storage.CustomAction
 import com.example.myapp.storage.CustomActions
 import com.example.myapp.storage.SettingsStore
 
-/** The Clicks tab: the recorded clicks and drags of the active loadout: see them, change their times, reorder, delete, run. */
+/**
+ * The Clicks tab: the custom list of the active loadout (taps, swipes, holds, waits and the app's own
+ * sort, merge and summon steps): see it, open a step's settings, reorder, delete, add steps, run it.
+ */
 class ClicksFragment : Fragment() {
 
     private lateinit var binding: ActivityActionsBinding
@@ -44,16 +46,17 @@ class ClicksFragment : Fragment() {
             if (service == null) {
                 toast("Turn on the accessibility service first")
             } else {
-                service.showPanel()
-                toast("Panel is showing. Open the game and use + Click and + Drag.")
+                service.showClickWindow()
+                toast("Click window is showing. Open the game and add taps, swipes and holds.")
             }
         }
+        binding.btnAddStep.setOnClickListener { addStepDialog() }
         binding.btnRunOnce.setOnClickListener {
             saveRepeat()
             val service = AutomationService.instance
             when {
                 service == null -> toast("Turn on the accessibility service first")
-                data.actions.isEmpty() -> toast("No clicks or drags yet")
+                data.actions.isEmpty() -> toast("The list is empty")
                 else -> {
                     service.runCustomAfterDelay(SettingsStore.load(requireContext()).countdown.pick())
                     requireActivity().moveTaskToBack(true)
@@ -62,7 +65,7 @@ class ClicksFragment : Fragment() {
         }
         binding.btnClearAll.setOnClickListener {
             AlertDialog.Builder(requireContext())
-                .setTitle("Delete all recorded clicks and drags?")
+                .setTitle("Delete the whole list?")
                 .setMessage("This can't be undone.")
                 .setPositiveButton("Delete") { _, _ ->
                     data.actions.clear()
@@ -97,7 +100,7 @@ class ClicksFragment : Fragment() {
     }
 
     private fun saveRepeat() {
-        val n = binding.repeatInput.text.toString().toIntOrNull()?.coerceIn(1, 100000) ?: data.repeat
+        val n = binding.repeatInput.text.toString().toIntOrNull()?.coerceIn(1, 1_000_000) ?: data.repeat
         data.repeat = n
         ActionStore.save(requireContext(), data)
     }
@@ -107,24 +110,47 @@ class ClicksFragment : Fragment() {
         shown.addAll(data.actions)
         adapter.notifyDataSetChanged()
         binding.summary.text =
-            if (data.actions.isEmpty()) "No clicks or drags yet."
-            else "${data.actions.size} action(s), recorded on a ${data.screenWidth} x ${data.screenHeight} screen"
+            if (data.actions.isEmpty()) "The list is empty."
+            else "${data.actions.size} step(s)" +
+                if (data.screenWidth > 0) ", positions recorded on a ${data.screenWidth} x ${data.screenHeight} screen" else ""
     }
 
     private fun range(min: Long, max: Long) = if (max <= min) "$min ms" else "$min to $max ms"
 
+    private fun title(i: Int, a: CustomAction): String = when (a.type) {
+        ActionType.CLICK -> "${i + 1}. Tap at (${a.x1}, ${a.y1})"
+        ActionType.DRAG -> "${i + 1}. Swipe (${a.x1}, ${a.y1}) to (${a.x2}, ${a.y2})"
+        ActionType.HOLD -> "${i + 1}. Hold at (${a.x1}, ${a.y1}) for ${range(a.holdMin, a.holdMax)}"
+        ActionType.WAIT -> "${i + 1}. Wait ${range(a.holdMin, a.holdMax)}"
+        ActionType.SORT -> "${i + 1}. Sort board"
+        ActionType.MERGE -> "${i + 1}. Merge chain"
+        ActionType.SUMMON -> "${i + 1}. Summon (hold until the grid is full)"
+    }
+
+    private fun detail(a: CustomAction): String = buildString {
+        if (a.type == ActionType.CLICK) append("touch & hold ${range(a.holdMin, a.holdMax)}, ")
+        if (a.type == ActionType.DRAG) append("swipe duration ${range(a.holdMin, a.holdMax)}, ")
+        append("then wait ${range(a.waitMin, a.waitMax)}")
+        if (a.repeat > 1) append(", x${a.repeat}")
+        if (a.jitter > 0) append(", offset ${a.jitter} px")
+    }
+
     private fun menu(position: Int) {
-        val a = data.actions.getOrNull(position) ?: return
+        if (data.actions.getOrNull(position) == null) return
         AlertDialog.Builder(requireContext())
-            .setTitle("Action ${position + 1}")
-            .setItems(arrayOf("Change times", "Move up", "Move down", "Delete")) { _, which ->
+            .setTitle("Step ${position + 1}")
+            .setItems(arrayOf("Settings", "Move up", "Move down", "Delete")) { _, which ->
                 when (which) {
-                    0 -> editTimes(a)
+                    0 -> startActivity(
+                        Intent(requireContext(), ActionSettingsActivity::class.java)
+                            .putExtra(ActionSettingsActivity.EXTRA_INDEX, position)
+                    )
                     1 -> move(position, position - 1)
                     2 -> move(position, position + 1)
                     else -> {
                         data.actions.removeAt(position)
                         ActionStore.save(requireContext(), data)
+                        AutomationService.instance?.refreshMarkers()
                         refresh()
                     }
                 }
@@ -138,44 +164,28 @@ class ClicksFragment : Fragment() {
         val item = data.actions.removeAt(from)
         data.actions.add(to, item)
         ActionStore.save(requireContext(), data)
+        AutomationService.instance?.refreshMarkers()
         refresh()
     }
 
-    private fun editTimes(a: CustomAction) {
-        val dp = resources.displayMetrics.density
-        val pad = (16 * dp).toInt()
-        val box = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, 0)
-        }
-        fun field(label: String, value: Long): EditText {
-            box.addView(TextView(requireContext()).apply { text = label; textSize = 12f })
-            val input = EditText(requireContext()).apply {
-                inputType = InputType.TYPE_CLASS_NUMBER
-                setText(value.toString())
-            }
-            box.addView(input)
-            return input
-        }
-        val what = if (a.type == ActionType.CLICK) "Press length" else "Drag duration"
-        val hMin = field("$what, from (ms)", a.holdMin)
-        val hMax = field("$what, to (ms)", a.holdMax)
-        val wMin = field("Wait after it, from (ms)", a.waitMin)
-        val wMax = field("Wait after it, to (ms)", a.waitMax)
-
+    /** Taps, swipes and holds need real spots, so they are added with the click window; these steps need none. */
+    private fun addStepDialog() {
+        val kinds = listOf(
+            ActionType.SORT to "Sort board",
+            ActionType.MERGE to "Merge chain",
+            ActionType.SUMMON to "Summon (hold until the grid is full)",
+            ActionType.WAIT to "Wait"
+        )
         AlertDialog.Builder(requireContext())
-            .setTitle("Times in milliseconds")
-            .setMessage("Same number in both boxes = fixed. A range = a random time in it every time.")
-            .setView(box)
-            .setPositiveButton("Save") { _, _ ->
-                val hm = (hMin.text.toString().toLongOrNull() ?: a.holdMin).coerceIn(1L, 60000L)
-                val hx = (hMax.text.toString().toLongOrNull() ?: a.holdMax).coerceIn(1L, 60000L).coerceAtLeast(hm)
-                val wm = (wMin.text.toString().toLongOrNull() ?: a.waitMin).coerceIn(0L, 600000L)
-                val wx = (wMax.text.toString().toLongOrNull() ?: a.waitMax).coerceIn(0L, 600000L).coerceAtLeast(wm)
-                a.holdMin = hm
-                a.holdMax = hx
-                a.waitMin = wm
-                a.waitMax = wx
+            .setTitle("Add a step to the end of the list")
+            .setItems(kinds.map { it.second }.toTypedArray()) { _, which ->
+                val type = kinds[which].first
+                val step = if (type == ActionType.WAIT) {
+                    CustomAction(type, 0, 0, 0, 0, 1000L, 1000L, 0L, 0L)
+                } else {
+                    CustomAction(type, 0, 0, 0, 0, 0L, 0L, 500L, 500L)
+                }
+                data.actions.add(step)
                 ActionStore.save(requireContext(), data)
                 refresh()
             }
@@ -192,15 +202,12 @@ class ClicksFragment : Fragment() {
                 orientation = LinearLayout.VERTICAL
                 setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
             }
-            val title = if (a.type == ActionType.CLICK) {
-                "${position + 1}. Click at (${a.x1}, ${a.y1})"
-            } else {
-                "${position + 1}. Drag (${a.x1}, ${a.y1}) to (${a.x2}, ${a.y2})"
-            }
-            val whatName = if (a.type == ActionType.CLICK) "press" else "duration"
-            box.addView(TextView(context).apply { text = title; textSize = 16f })
             box.addView(TextView(context).apply {
-                text = "$whatName ${range(a.holdMin, a.holdMax)}, then wait ${range(a.waitMin, a.waitMax)}"
+                text = title(position, a)
+                textSize = 16f
+            })
+            box.addView(TextView(context).apply {
+                text = detail(a)
                 textSize = 12f
             })
             return box

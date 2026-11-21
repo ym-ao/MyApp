@@ -19,6 +19,7 @@ import com.example.myapp.storage.ClickPointStorage
 import com.example.myapp.storage.GridStorage
 import com.example.myapp.storage.LoadoutStore
 import com.example.myapp.storage.PlanStore
+import com.example.myapp.storage.RunLog
 import com.example.myapp.storage.SettingsStore
 
 /** The Run tab: service status, loadouts, the floating panel, the loop, and one-piece tests. */
@@ -46,6 +47,11 @@ class RunFragment : Fragment() {
             val service = needService() ?: return@setOnClickListener
             service.showPanel()
             toast("Panel is showing. Open the game to use it.")
+        }
+        binding.btnShowClickWindow.setOnClickListener {
+            val service = needService() ?: return@setOnClickListener
+            service.showClickWindow()
+            toast("Click window is showing. Open the game to use it.")
         }
         binding.btnStartLoop.setOnClickListener {
             val service = needService() ?: return@setOnClickListener
@@ -207,6 +213,7 @@ class RunFragment : Fragment() {
     }
 
     private fun refreshStatus() {
+        binding.lastRunText.text = RunLog.describe(requireContext()) ?: ""
         binding.statusText.text = if (AutomationService.isRunning()) {
             "Accessibility service: ON"
         } else {

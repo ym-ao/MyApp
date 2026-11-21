@@ -10,7 +10,7 @@
         android:layout_height="wrap_content"
         android:padding="8dp"
         android:textSize="12sp"
-        android:text="Record clicks and drags like an auto clicker: show the floating panel, open the game, then tap + Click or + Drag and drag the numbered markers onto the real spots. Come back here to see the list, change times, reorder, or delete. Everything in milliseconds; a range (from and to) uses a random time in it each time." />
+        android:text="The custom list: taps, swipes, holds, waits and the app's own sort, merge and summon steps. Show the click window, open the game, and add steps with its buttons; drag the numbered markers onto the real spots and tap a marker for that step's settings. Here you can reorder, delete, change settings, add steps that need no spot, and run the list. Everything is in milliseconds (from and to: a range uses a random time each time)." />
 
     <TextView
         android:id="@+id/summary"
@@ -42,7 +42,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Show floating panel" />
+            android:text="Show click window" />
 
         <Button
             android:id="@+id/btnRunOnce"
@@ -51,6 +51,12 @@
             android:layout_weight="1"
             android:text="Run the list now" />
     </LinearLayout>
+
+    <Button
+        android:id="@+id/btnAddStep"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Add a step (sort, merge, summon, wait)" />
 
     <Button
         android:id="@+id/btnClearAll"

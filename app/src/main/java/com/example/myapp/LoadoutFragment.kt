@@ -79,6 +79,8 @@ class LoadoutFragment : Fragment() {
         showRange(binding.loopPauseMinInput, binding.loopPauseMaxInput, s.loopPause)
         showRange(binding.countdownMinInput, binding.countdownMaxInput, s.countdown)
         binding.loopsInput.setText(s.loops.toString())
+        binding.checkIdleStop.isChecked = s.stopWhenIdle
+        binding.failedLoopsInput.setText(s.maxFailedLoops.toString())
         binding.sortPassesInput.setText(s.sortPasses.toString())
         binding.sortMovesInput.setText(s.sortMovesPerPass.toString())
         binding.checkSwap.isChecked = s.swap
@@ -184,6 +186,8 @@ class LoadoutFragment : Fragment() {
             rereadMerge = binding.checkReread.isChecked,
             previewOnly = binding.checkPreview.isChecked,
             maxHold = readRange(binding.holdMinInput, binding.holdMaxInput, old.maxHold, 500L, 600000L),
+            stopWhenIdle = binding.checkIdleStop.isChecked,
+            maxFailedLoops = binding.failedLoopsInput.text.toString().toIntOrNull()?.coerceIn(1, 1000) ?: old.maxFailedLoops,
             loops = binding.loopsInput.text.toString().toIntOrNull()?.coerceIn(0, 100000) ?: old.loops,
             loopPause = readRange(binding.loopPauseMinInput, binding.loopPauseMaxInput, old.loopPause, 0L, 600000L),
             countdown = readRange(binding.countdownMinInput, binding.countdownMaxInput, old.countdown, 0L, 60000L),

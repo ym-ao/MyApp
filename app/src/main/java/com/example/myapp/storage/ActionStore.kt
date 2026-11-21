@@ -5,12 +5,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-enum class ActionType { CLICK, DRAG }
+enum class ActionType { CLICK, DRAG, HOLD, WAIT, SORT, MERGE, SUMMON }
 
 /**
- * One recorded click or drag. Positions are real screen pixels. For a click only x1/y1 are used.
- * hold = how long the finger stays down (a drag's duration); wait = pause after the action.
- * Each is a range in milliseconds: a random value in it is used every time.
+ * One step of the custom list. CLICK, DRAG and HOLD use real screen pixels (a click and a hold only
+ * x1/y1). hold = how long the finger stays down (a drag's duration, a hold's length, a WAIT's length);
+ * wait = pause after the step. Each is a range in milliseconds: a random value in it is used every time.
+ * repeat = how many times the step is done in a row; jitter = a random offset in pixels (anti-detection).
+ * SORT, MERGE and SUMMON are the app's own steps and use no positions.
  */
 class CustomAction(
     val type: ActionType,
@@ -21,7 +23,9 @@ class CustomAction(
     var holdMin: Long,
     var holdMax: Long,
     var waitMin: Long,
-    var waitMax: Long
+    var waitMax: Long,
+    var repeat: Int = 1,
+    var jitter: Int = 0
 )
 
 class CustomActions(
@@ -52,7 +56,8 @@ object ActionStore {
                         x1 = a.getInt("x1"), y1 = a.getInt("y1"),
                         x2 = a.optInt("x2", a.getInt("x1")), y2 = a.optInt("y2", a.getInt("y1")),
                         holdMin = a.optLong("hMin", 50L), holdMax = a.optLong("hMax", 50L),
-                        waitMin = a.optLong("wMin", 500L), waitMax = a.optLong("wMax", 500L)
+                        waitMin = a.optLong("wMin", 500L), waitMax = a.optLong("wMax", 500L),
+                        repeat = a.optInt("rep", 1).coerceAtLeast(1), jitter = a.optInt("jit", 0).coerceAtLeast(0)
                     )
                 )
             }
@@ -70,6 +75,7 @@ object ActionStore {
             o.put("x1", a.x1).put("y1", a.y1).put("x2", a.x2).put("y2", a.y2)
             o.put("hMin", a.holdMin).put("hMax", a.holdMax)
             o.put("wMin", a.waitMin).put("wMax", a.waitMax)
+            o.put("rep", a.repeat).put("jit", a.jitter)
             arr.put(o)
         }
         val root = JSONObject()
