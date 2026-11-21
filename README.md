@@ -100,6 +100,10 @@ There are two floating windows, and each switches into the other:
 - The list (per loadout) can mix taps, swipes, holds, waits and the app's own **Sort, Merge and Summon** steps, in any order, each with its own repetitions and times (every time is a from/to range in milliseconds). It runs once or repeats as set in the Clicks tab, and it is also a step of the loop.
 - The toolbar and markers hide while something runs (they would block touches and show up in screenshots); the small status bar stays. Keep windows off the grid.
 
+## Running notification (built, needs on-device testing)
+
+While a job is running or a floating window is on, an ongoing notification shows "MyApp is running" (or "MyApp windows are on") with the current status and, during a job, a **Stop** button; tapping it opens the app. On Android 13 and newer the Run tab shows an **Allow notifications** button until the permission is granted. It is a normal ongoing notification, not a foreground service, so on newer Android versions it can be swiped away; it comes back with the next status update. It disappears when nothing is running.
+
 ## Loop behaviour
 
 A problem inside a loop (a missed drag, a board that hasn't settled after a lag spike, a failed screenshot) does not end the run: the next loop starts with a fresh read. The run ends when you stop it, when the loop count is reached, after the set number of problems in a row (Loadout tab, default 5), or, if you tick it, when nothing was left to do for two loops. The reason it ended stays on the Run tab as "Last run ended ...".

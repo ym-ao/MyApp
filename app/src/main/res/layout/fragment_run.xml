@@ -24,6 +24,13 @@
             android:textSize="13sp" />
 
         <Button
+            android:id="@+id/btnNotifications"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Allow notifications (so MyApp can show that it is running)"
+            android:visibility="gone" />
+
+        <Button
             android:id="@+id/btnEnableService"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -1,6 +1,8 @@
 package com.example.myapp
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -11,7 +13,9 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.example.myapp.automation.BoardAction
 import com.example.myapp.databinding.FragmentRunBinding
@@ -27,6 +31,14 @@ class RunFragment : Fragment() {
 
     private lateinit var binding: FragmentRunBinding
 
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) {
+                toast("Notifications are off. You can allow them in Settings > Apps > MyApp > Notifications.")
+            }
+            refreshNotificationButton()
+        }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         binding = FragmentRunBinding.inflate(inflater, container, false)
         return binding.root
@@ -35,6 +47,9 @@ class RunFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        binding.btnNotifications.setOnClickListener {
+            if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         binding.btnEnableService.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
@@ -88,9 +103,18 @@ class RunFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         refreshStatus()
+        refreshNotificationButton()
         fillInDefaults()
         refreshLoadouts()
         showPendingPlan()
+    }
+
+    /** On Android 13 and newer the "running" notification needs a permission. */
+    private fun refreshNotificationButton() {
+        val missing = Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        binding.btnNotifications.visibility = if (missing) View.VISIBLE else View.GONE
     }
 
     private fun toast(text: String) = Toast.makeText(requireContext(), text, Toast.LENGTH_LONG).show()

@@ -3,6 +3,10 @@ package com.example.myapp
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -23,6 +27,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import com.example.myapp.automation.BoardAction
 import com.example.myapp.automation.BoardPlanner
 import com.example.myapp.automation.BoardState
@@ -100,6 +105,8 @@ class AutomationService : AccessibilityService() {
         instance = null
         jobActive = false
         hidePanel()
+        hideClickWindow()
+        cancelNotification()
         return super.onUnbind(intent)
     }
 
@@ -227,6 +234,7 @@ class AutomationService : AccessibilityService() {
         stopRequested = false
         hideMarkers()
         setClickToolbarVisible(false)
+        updateNotification()
     }
 
     private fun endJob(message: String) {
@@ -237,6 +245,7 @@ class AutomationService : AccessibilityService() {
         setPanelStatus("Ready")
         setClickToolbarVisible(true)
         RunLog.save(applicationContext, message)
+        updateNotification()
         toast(message)
     }
 
@@ -1794,6 +1803,7 @@ class AutomationService : AccessibilityService() {
         refreshStatusBar()
         mainHandler.removeCallbacks(statusTicker)
         mainHandler.postDelayed(statusTicker, 500L)
+        updateNotification()
     }
 
     fun hideClickWindow() {
@@ -1814,6 +1824,7 @@ class AutomationService : AccessibilityService() {
         clickPauseButton = null
         clickLoadoutLabel = null
         mainHandler.removeCallbacks(statusTicker)
+        updateNotification()
     }
 
     // ---- the run window (the original floating panel) ----
@@ -1890,6 +1901,7 @@ class AutomationService : AccessibilityService() {
             panelLoadoutButton = null
             toast("Couldn't show the run window: ${e.message}")
         }
+        updateNotification()
     }
 
     fun hidePanel() {
@@ -1902,6 +1914,7 @@ class AutomationService : AccessibilityService() {
         panelView = null
         panelStatusText = null
         panelLoadoutButton = null
+        updateNotification()
     }
 
     private fun onPanelStart() {
@@ -1929,6 +1942,72 @@ class AutomationService : AccessibilityService() {
                 counters = text
                 refreshStatusBar()
             }
+            if (text != lastStatus) {
+                lastStatus = text
+                updateNotification()
+            }
+        }
+    }
+
+    // ---- the "MyApp is running" notification ----
+
+    private val notificationId = 4711
+    private val notificationChannelId = "myapp_running"
+    private var lastStatus = "Ready"
+
+    /**
+     * Shows an ongoing notification while a job is running or a floating window is on, so it is clear
+     * that MyApp is active in the background (an accessibility service shows nothing by itself).
+     * On Android 13 and newer the notification permission must be allowed (Run tab). On newer Android
+     * versions the notification can be swiped away; it comes back with the next status update.
+     */
+    private fun updateNotification() {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val wanted = jobActive || panelView != null || clickToolbarView != null
+        if (!wanted) {
+            manager.cancel(notificationId)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(notificationChannelId, "MyApp running", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Shows that MyApp is running or that its floating windows are on"
+                    setShowBadge(false)
+                }
+            )
+        }
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val open = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags
+        )
+        val builder = NotificationCompat.Builder(this, notificationChannelId)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(if (jobActive) "MyApp is running" else "MyApp windows are on")
+            .setContentText(lastStatus)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(open)
+        if (jobActive) {
+            val stop = PendingIntent.getBroadcast(this, 1, Intent(this, StopReceiver::class.java), flags)
+            builder.addAction(0, "Stop", stop)
+        }
+        try {
+            manager.notify(notificationId, builder.build())
+        } catch (_: Exception) {
+            // without the notification permission nothing is shown; the app keeps working
+        }
+    }
+
+    private fun cancelNotification() {
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(notificationId)
+    }
+
+    /** The Stop button of the notification. */
+    fun stopFromNotification() {
+        if (jobActive) {
+            stopRequested = true
+            toast("Stopping...")
         }
     }
 
